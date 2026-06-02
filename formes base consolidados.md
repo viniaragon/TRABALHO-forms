@@ -273,13 +273,13 @@ Número de Exame Anatomopatológico de Mama - Biópsia:
 0
 0
 0
+8
 0
 0
 0
 0
-0
-0
-06
+11
+6
 
 
 
@@ -378,20 +378,20 @@ Número de OCI fechadas:
 
 Nome do responsável pelo preenchimento:
 *
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
+Fabiana Teixeira
 Fabiana Teixeira

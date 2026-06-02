@@ -99,6 +99,16 @@ body {
     gap: 16px;
 }
 
+.brand-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+}
+
+a.btn {
+    text-decoration: none;
+}
+
 .icon-pulse {
     width: 52px;
     height: 52px;

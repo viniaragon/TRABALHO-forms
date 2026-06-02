@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1B4D9C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Reunião de Desmobilização — UMAE | Agora Tem Especialistas</title>
+<style>
+  :root{
+    --azul:#1B4D9C; --azul2:#2D6FD6; --azulclaro:#E8F0FB;
+    --verde:#2EA84C; --amarelo:#F4C41F; --vermelho:#D62D2D;
+    --bg:#ECEAE2; --tx:#2c2c2c; --branco:#fff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:'Segoe UI',Calibri,system-ui,sans-serif;
+    background:#0d2240; color:var(--tx); overflow:hidden;
+  }
+  /* ---------- Estrutura de slides ---------- */
+  .deck{position:relative; width:100vw; height:100vh;}
+  .slide{
+    position:absolute; inset:0; padding:4vh 5vw 7vh;
+    background:var(--bg); display:none; flex-direction:column;
+    animation:fade .4s ease; overflow:hidden;
+  }
+  .slide.active{display:flex;}
+  @keyframes fade{from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;}}
+  /* faixa MS no topo */
+  .slide::before{
+    content:""; position:absolute; top:0; left:0; right:0; height:.7vh;
+    background:linear-gradient(90deg,var(--amarelo) 0 25%,var(--vermelho) 25% 50%,var(--verde) 50% 75%,var(--azul) 75% 100%);
+  }
+  h1{color:var(--azul); font-size:2.6vw; line-height:1.1; margin-bottom:.4vh;}
+  h2{color:var(--azul); font-size:2.3vw; display:flex; align-items:center; gap:.6vw; border-left:.6vw solid var(--azul); padding-left:1vw; margin-bottom:.4vh;}
+  .sub{color:#555; font-size:1.15vw; margin:.2vh 0 2.2vh 1.6vw;}
+  /* ---------- Capa ---------- */
+  .cover{justify-content:center; position:relative;}
+  .cover .circle{position:absolute; top:-18vh; left:-14vw; width:46vh; height:46vh; border-radius:50%; background:var(--azul); opacity:.95;}
+  .cover .kicker{color:var(--verde); font-weight:800; font-size:1.8vw; letter-spacing:.05em; z-index:2;}
+  .cover .big{color:var(--azul); font-weight:900; font-size:5vw; line-height:1.05; margin:1vh 0; z-index:2;}
+  .cover .line{font-size:1.5vw; color:#444; z-index:2;}
+  .cover .meta{margin-top:3vh; font-size:1.1vw; color:#555; z-index:2;}
+  .cover-logo{position:relative; z-index:2; max-width:26vw; max-height:18vh; margin-bottom:1.5vh; object-fit:contain; align-self:flex-start;}
+  .badge{display:inline-block; background:var(--azul); color:#fff; padding:.5vh 1.2vw; border-radius:99px; font-size:1vw; font-weight:700; margin-top:2vh;}
+  /* ---------- Cards de números ---------- */
+  .cards{display:grid; grid-template-columns:repeat(4,1fr); gap:1.4vw; margin-top:1vh;}
+  .card{background:#fff; border-radius:14px; padding:2vh 1vw; text-align:center; border-top:.6vh solid var(--azul); box-shadow:0 6px 18px rgba(0,0,0,.08); transition:transform .2s;}
+  .card:hover{transform:translateY(-4px);}
+  .card.green{border-color:var(--verde);} .card.red{border-color:var(--vermelho);} .card.yellow{border-color:var(--amarelo);}
+  .card .num{font-size:2.6vw; font-weight:900; color:var(--azul);}
+  .card.green .num{color:var(--verde);} .card.red .num{color:var(--vermelho);} .card.yellow .num{color:#b8920f;}
+  .card .lbl{font-size:.95vw; color:#555; margin-top:.4vh;}
+  /* ---------- Gráfico de barras ---------- */
+  .chart{display:flex; align-items:flex-end; gap:.5vw; height:26vh; padding:1vh 0; border-bottom:2px solid #ccc; margin-top:1vh;}
+  .bar-wrap{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;}
+  .bar{width:70%; background:linear-gradient(180deg,var(--azul2),var(--azul)); border-radius:5px 5px 0 0; position:relative; transition:height .6s ease;}
+  .bar .v{position:absolute; top:-2.4vh; left:50%; transform:translateX(-50%); font-size:.75vw; font-weight:700; color:var(--azul);}
+  .bar-wrap .d{font-size:.7vw; color:#666; margin-top:.6vh; white-space:nowrap;}
+  .legend{font-size:.9vw; color:#666; margin-top:1vh;}
+  /* ---------- Listas / pendências ---------- */
+  .alert{background:var(--azulclaro); border:1.5px solid var(--azul); border-radius:12px; padding:2vh 2vw; color:var(--azul); font-weight:700; font-size:1.25vw; margin-bottom:2vh;}
+  .alert.red{background:#fdeaea; border-color:var(--vermelho); color:var(--vermelho);}
+  .pend{display:flex; gap:1vw; align-items:flex-start; margin-bottom:1.4vh;}
+  .pend .dot{flex:none; width:1.1vw; height:1.1vw; border-radius:50%; background:var(--vermelho); margin-top:.4vh;}
+  .pend .t{color:var(--azul); font-weight:700; font-size:1.3vw; width:24vw;}
+  .pend .d{color:#444; font-size:1.15vw; flex:1;}
+  /* ---------- Tabela ---------- */
+  table{width:100%; border-collapse:collapse; font-size:1.05vw; margin-top:1vh;}
+  th{background:var(--azul); color:#fff; padding:1.1vh .8vw; text-align:left; font-size:1vw;}
+  td{padding:1vh .8vw; border-bottom:1px solid #ddd;}
+  tr:nth-child(even) td{background:var(--azulclaro);}
+  .matrix th:nth-child(3){background:var(--verde);} .matrix th:nth-child(4){background:var(--amarelo); color:var(--tx);}
+  /* ---------- Fluxo ---------- */
+  .flow{display:flex; flex-direction:column; gap:1.1vh; margin-top:.5vh;}
+  .step{display:flex; align-items:center; gap:1.2vw;}
+  .step .n{flex:none; width:3.4vw; height:3.4vw; border-radius:50%; background:var(--azul); color:#fff; font-weight:900; font-size:1.5vw; display:flex; align-items:center; justify-content:center;}
+  .step .t{color:var(--azul); font-weight:700; font-size:1.25vw; width:22vw;}
+  .step .d{color:#444; font-size:1.1vw; flex:1;}
+  /* ---------- Contatos ---------- */
+  .contacts{display:grid; grid-template-columns:1fr 1fr; gap:2vw; margin-bottom:2vh;}
+  .cbox{border-radius:14px; padding:2.5vh 2vw; color:#fff;}
+  .cbox h3{font-size:1.5vw; margin-bottom:1.2vh;}
+  .cbox p{font-size:1.2vw; line-height:2;}
+  .cbox.blue{background:var(--azul);} .cbox.green{background:var(--verde);}
+  /* ---------- Continuidade ---------- */
+  .next{display:flex; align-items:center; gap:1.2vw; margin-bottom:1.3vh;}
+  .next .n{flex:none; width:2.8vw; height:2.8vw; border-radius:8px; background:var(--verde); color:#fff; font-weight:800; font-size:1.3vw; display:flex; align-items:center; justify-content:center;}
+  .next .t{font-size:1.25vw; color:#333;}
+  /* ---------- Encerramento ---------- */
+  .end{justify-content:center; position:relative;}
+  .end .circle{position:absolute; bottom:-20vh; right:-12vw; width:48vh; height:48vh; border-radius:50%; background:var(--azul);}
+  .end .ty{font-size:6vw; font-weight:900; color:var(--azul); z-index:2;}
+  .end p{font-size:1.5vw; color:#444; line-height:1.8; z-index:2;}
+  .end .ct{margin-top:3vh; font-size:1.4vw; color:var(--azul); font-weight:700; z-index:2;}
+  /* ---------- Navegação / HUD ---------- */
+  .hud{position:fixed; bottom:2vh; left:0; right:0; display:flex; align-items:center; justify-content:center; gap:2vw; z-index:50;}
+  .hud button{background:var(--azul); color:#fff; border:none; width:4.2vh; height:4.2vh; border-radius:50%; font-size:2vh; cursor:pointer; opacity:.85;}
+  .hud button:hover{opacity:1;}
+  .counter{font-size:1.6vh; color:var(--azul); font-weight:700; background:#fff; padding:.6vh 1.4vh; border-radius:99px; box-shadow:0 2px 8px rgba(0,0,0,.1);}
+  .progress{position:fixed; top:0; left:0; height:.7vh; background:var(--azul2); z-index:60; transition:width .3s; opacity:.6;}
+  .source{position:fixed; bottom:2vh; right:2vw; font-size:1.3vh; color:#888; z-index:50;}
+  .live{display:inline-block; width:1vh; height:1vh; border-radius:50%; background:#bbb; margin-right:.5vh;}
+  .live.on{background:var(--verde); box-shadow:0 0 6px var(--verde);}
+  .hint{position:fixed; top:1.5vh; right:2vw; font-size:1.3vh; color:var(--azul); background:#fff; padding:.5vh 1.2vh; border-radius:99px; z-index:50; opacity:.8;}
+
+  /* ====================== MOBILE / RETRATO ====================== */
+  @media (max-width:820px){
+    body{overflow:auto; -webkit-text-size-adjust:100%;}
+    .deck{height:auto; min-height:100vh;}
+    .slide{position:relative; inset:auto; min-height:100svh; height:auto; padding:4vh 5vw 13vh; overflow-y:auto;}
+    .slide:not(.active){display:none;}
+    .slide::before{height:5px;}
+    h1{font-size:1.5rem;}
+    h2{font-size:1.3rem; border-left-width:5px; padding-left:10px; gap:8px;}
+    .sub{font-size:.9rem; margin:.4rem 0 1.1rem 0;}
+    /* capa */
+    .cover{padding-top:9vh;}
+    .cover .circle{width:190px; height:190px; top:-80px; left:-70px;}
+    .cover .kicker{font-size:1rem;}
+    .cover .big{font-size:2.3rem; margin:1.2rem 0;}
+    .cover .line{font-size:1rem;}
+    .cover .meta{font-size:.88rem; margin-top:1.6rem; line-height:1.7;}
+    .badge{font-size:.82rem; padding:7px 16px; margin-top:1.4rem;}
+    /* cards */
+    .cards{grid-template-columns:repeat(2,1fr); gap:10px;}
+    .card{padding:13px 8px; border-top-width:4px; border-radius:12px;}
+    .card .num{font-size:1.7rem;}
+    .card .lbl{font-size:.74rem;}
+    /* gráfico */
+    .chart{height:150px; gap:3px; margin-top:.6rem;}
+    .bar .v{font-size:.58rem; top:-15px;}
+    .bar-wrap .d{font-size:.52rem; transform:rotate(-50deg); transform-origin:top center; margin-top:12px;}
+    .legend{font-size:.82rem;}
+    /* pendências */
+    .alert{font-size:.95rem; padding:12px 14px; margin-bottom:1.1rem;}
+    .pend{flex-wrap:wrap; gap:.4rem 10px; margin-bottom:1rem;}
+    .pend .dot{width:11px; height:11px;}
+    .pend .t{width:auto; flex:1 1 70%; font-size:1rem;}
+    .pend .d{font-size:.9rem; flex-basis:100%; padding-left:21px;}
+    /* tabelas: rolagem horizontal */
+    table{font-size:.82rem; display:block; overflow-x:auto; white-space:nowrap; -webkit-overflow-scrolling:touch;}
+    th,td{padding:9px 10px;}
+    /* fluxo */
+    .flow{gap:.7rem;}
+    .step{gap:11px; align-items:flex-start;}
+    .step .n{width:34px; height:34px; min-width:34px; font-size:1rem;}
+    .step .t{width:auto; flex:1 1 100%; font-size:.98rem;}
+    .step .d{font-size:.84rem; flex-basis:100%; padding-left:45px; margin-top:-4px;}
+    .step{flex-wrap:wrap;}
+    /* contatos */
+    .contacts{grid-template-columns:1fr; gap:12px; margin-bottom:1.1rem;}
+    .cbox{padding:16px 18px; border-radius:12px;}
+    .cbox h3{font-size:1.15rem; margin-bottom:.6rem;}
+    .cbox p{font-size:1rem; line-height:1.9;}
+    /* continuidade */
+    .next{gap:11px; margin-bottom:.8rem;}
+    .next .n{width:32px; height:32px; min-width:32px; font-size:1rem;}
+    .next .t{font-size:.96rem;}
+    /* encerramento */
+    .end{padding-top:10vh;}
+    .end .ty{font-size:2.8rem;}
+    .end p{font-size:1.05rem;}
+    .end .ct{font-size:1rem; margin-top:1.6rem; line-height:1.7;}
+    .end .circle{width:200px; height:200px; bottom:-80px; right:-70px;}
+    /* HUD / navegação touch */
+    .hud{bottom:14px; gap:20px;}
+    .hud button{width:46px; height:46px; font-size:24px; opacity:.96;}
+    .counter{font-size:14px; padding:6px 14px;}
+    .hint{font-size:10px; top:8px; right:8px; padding:4px 10px;}
+    .hint::after{content:" · deslize";}
+    .source{font-size:10px; bottom:64px; right:10px;}
+    .progress{height:4px;}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="hint">◀ ▶ para navegar · F11 tela cheia</div>
+<div class="deck" id="deck"><!-- slides injetados via JS --></div>
+<div class="hud">
+  <button onclick="go(-1)">‹</button>
+  <span class="counter"><span id="cur">1</span> / <span id="tot">9</span></span>
+  <button onclick="go(1)">›</button>
+</div>
+<div class="source"><span class="live" id="liveDot"></span><span id="srcLabel">Dados locais (offline)</span></div>
+
+<script>
+/* ============================================================
+   DADOS BRUTOS — diário da carreta (banco local consolidado)
+   Editáveis: altere aqui ou deixe o fetch ao vivo sobrescrever.
+   ============================================================ */
+const CONFIG = {
+  municipio: "________________",   // <- preencha o município
+  periodo: "08/05/2026 a 01/06/2026",
+  dataReuniao: "02/06/2026",
+  responsavel: "Fabiana Teixeira",
+  apiUrl: "http://localhost:3000/api/data"  // se o servidor estiver no ar, atualiza ao vivo
+};
+
+let DADOS = [
+  {dates:"08/05/2026",agendadas:59,atendidas:41,faltaram:18,vagas:70,consultas:85,usg_mamaria:23,usg_transvaginal:26,usg_pelvica:12,mamografia:19,puncao_mama:0,biopsia_mama:0,colposcopia:10,biopsia_colo:1,oci_fechadas:85},
+  {dates:"11/05/2026",agendadas:66,atendidas:35,faltaram:31,vagas:70,consultas:68,usg_mamaria:12,usg_transvaginal:35,usg_pelvica:1,mamografia:32,puncao_mama:0,biopsia_mama:0,colposcopia:0,biopsia_colo:0,oci_fechadas:68},
+  {dates:"12/05/2026",agendadas:44,atendidas:41,faltaram:3,vagas:70,consultas:90,usg_mamaria:20,usg_transvaginal:38,usg_pelvica:2,mamografia:23,puncao_mama:0,biopsia_mama:0,colposcopia:10,biopsia_colo:0,oci_fechadas:90},
+  {dates:"13/05/2026",agendadas:65,atendidas:61,faltaram:4,vagas:70,consultas:135,usg_mamaria:35,usg_transvaginal:52,usg_pelvica:7,mamografia:39,puncao_mama:0,biopsia_mama:0,colposcopia:20,biopsia_colo:3,oci_fechadas:135},
+  {dates:"14/05/2026",agendadas:44,atendidas:70,faltaram:0,vagas:70,consultas:159,usg_mamaria:48,usg_transvaginal:59,usg_pelvica:2,mamografia:42,puncao_mama:0,biopsia_mama:0,colposcopia:30,biopsia_colo:8,oci_fechadas:159},
+  {dates:"15/05/2026",agendadas:36,atendidas:44,faltaram:0,vagas:70,consultas:94,usg_mamaria:20,usg_transvaginal:39,usg_pelvica:1,mamografia:30,puncao_mama:0,biopsia_mama:0,colposcopia:11,biopsia_colo:0,oci_fechadas:94},
+  {dates:"18/05/2026",agendadas:71,atendidas:59,faltaram:12,vagas:70,consultas:111,usg_mamaria:24,usg_transvaginal:48,usg_pelvica:5,mamografia:38,puncao_mama:0,biopsia_mama:0,colposcopia:0,biopsia_colo:0,oci_fechadas:111},
+  {dates:"19/05/2026",agendadas:68,atendidas:59,faltaram:9,vagas:70,consultas:127,usg_mamaria:27,usg_transvaginal:51,usg_pelvica:2,mamografia:39,puncao_mama:0,biopsia_mama:0,colposcopia:16,biopsia_colo:2,oci_fechadas:127},
+  {dates:"20/05/2026",agendadas:66,atendidas:64,faltaram:2,vagas:70,consultas:130,usg_mamaria:36,usg_transvaginal:57,usg_pelvica:4,mamografia:51,puncao_mama:0,biopsia_mama:0,colposcopia:6,biopsia_colo:5,oci_fechadas:130},
+  {dates:"21/05/2026",agendadas:69,atendidas:60,faltaram:9,vagas:70,consultas:125,usg_mamaria:37,usg_transvaginal:50,usg_pelvica:4,mamografia:41,puncao_mama:0,biopsia_mama:0,colposcopia:15,biopsia_colo:5,oci_fechadas:125},
+  {dates:"22/05/2026",agendadas:70,atendidas:67,faltaram:3,vagas:70,consultas:136,usg_mamaria:37,usg_transvaginal:52,usg_pelvica:4,mamografia:36,puncao_mama:8,biopsia_mama:8,colposcopia:15,biopsia_colo:3,oci_fechadas:136},
+  {dates:"25/05/2026",agendadas:72,atendidas:58,faltaram:15,vagas:70,consultas:127,usg_mamaria:27,usg_transvaginal:47,usg_pelvica:4,mamografia:38,puncao_mama:0,biopsia_mama:0,colposcopia:23,biopsia_colo:4,oci_fechadas:127},
+  {dates:"26/05/2026",agendadas:58,atendidas:51,faltaram:7,vagas:70,consultas:115,usg_mamaria:16,usg_transvaginal:42,usg_pelvica:4,mamografia:33,puncao_mama:0,biopsia_mama:0,colposcopia:22,biopsia_colo:5,oci_fechadas:115},
+  {dates:"27/05/2026",agendadas:80,atendidas:114,faltaram:0,vagas:140,consultas:245,usg_mamaria:62,usg_transvaginal:100,usg_pelvica:8,mamografia:69,puncao_mama:0,biopsia_mama:0,colposcopia:24,biopsia_colo:4,oci_fechadas:245},
+  {dates:"28/05/2026",agendadas:101,atendidas:108,faltaram:0,vagas:140,consultas:215,usg_mamaria:68,usg_transvaginal:84,usg_pelvica:5,mamografia:53,puncao_mama:0,biopsia_mama:0,colposcopia:39,biopsia_colo:4,oci_fechadas:215},
+  {dates:"29/05/2026",agendadas:61,atendidas:59,faltaram:2,vagas:70,consultas:100,usg_mamaria:19,usg_transvaginal:39,usg_pelvica:5,mamografia:36,puncao_mama:11,biopsia_mama:11,colposcopia:0,biopsia_colo:0,oci_fechadas:100},
+  {dates:"01/06/2026",agendadas:56,atendidas:75,faltaram:0,vagas:70,consultas:129,usg_mamaria:25,usg_transvaginal:42,usg_pelvica:5,mamografia:43,puncao_mama:6,biopsia_mama:6,colposcopia:28,biopsia_colo:4,oci_fechadas:129}
+];
+
+/* ============================================================
+   CÁLCULO DINÂMICO dos consolidados
+   ============================================================ */
+function num(v){ const n = parseInt(String(v).trim(),10); return isNaN(n)?0:n; }
+function consolidar(dados){
+  const T = {};
+  const campos = ["agendadas","atendidas","faltaram","vagas","consultas","usg_mamaria",
+    "usg_transvaginal","usg_pelvica","mamografia","puncao_mama","biopsia_mama",
+    "colposcopia","biopsia_colo","oci_fechadas"];
+  campos.forEach(c => T[c] = dados.reduce((s,r)=> s + num(r[c]), 0));
+  T.dias = dados.length;
+  T.ocupacao = T.vagas ? Math.round(T.atendidas / T.vagas * 100) : 0;
+  T.absent = T.agendadas ? (T.faltaram / T.agendadas * 100).toFixed(1) : 0;
+  return T;
+}
+
+/* ============================================================
+   GERAÇÃO DOS SLIDES
+   ============================================================ */
+function barChart(dados, campo, cor){
+  const max = Math.max(...dados.map(r=>num(r[campo]))) || 1;
+  return `<div class="chart">${dados.map(r=>{
+    const v = num(r[campo]); const h = (v/max*100).toFixed(0);
+    const dia = r.dates.slice(0,5);
+    return `<div class="bar-wrap"><div class="bar" style="height:${h}%;${cor?`background:${cor}`:''}"><span class="v">${v}</span></div><div class="d">${dia}</div></div>`;
+  }).join("")}</div>`;
+}
+
+function render(){
+  const T = consolidar(DADOS);
+  const biopsias = DADOS.filter(r=>num(r.biopsia_mama)>0)
+                        .reduce((s,r)=>s+num(r.biopsia_mama),0) || T.biopsia_mama;
+  const slides = [];
+
+  // 1 - CAPA
+  slides.push(`<section class="slide cover">
+    <div class="circle"></div>
+    <img src="logo-especialistas.png" alt="Agora tem Especialistas" class="cover-logo">
+    <div class="kicker">AGORA TEM ESPECIALISTAS</div>
+    <div class="big">REUNIÃO DE<br>DESMOBILIZAÇÃO</div>
+    <div class="line">Unidade Móvel de Atenção Especializada (UMAE) — Saúde da Mulher</div>
+    <div class="meta">Município: <b>${CONFIG.municipio}</b> &nbsp;·&nbsp; Período: <b>${CONFIG.periodo}</b> (${T.dias} dias)<br>
+    AgSUS · Ministério da Saúde · Secretaria Municipal de Saúde</div>
+    <span class="badge">Data da reunião: ${CONFIG.dataReuniao}</span>
+  </section>`);
+
+  // 2 - RESUMO (cards + gráfico)
+  slides.push(`<section class="slide">
+    <h2>📊 Resumo dos Atendimentos</h2>
+    <div class="sub">Consolidado de ${T.dias} dias — ${CONFIG.periodo} · recalculado automaticamente</div>
+    <div class="cards">
+      <div class="card"><div class="num">${T.agendadas.toLocaleString('pt-BR')}</div><div class="lbl">Pessoas agendadas</div></div>
+      <div class="card green"><div class="num">${T.atendidas.toLocaleString('pt-BR')}</div><div class="lbl">Pessoas atendidas</div></div>
+      <div class="card red"><div class="num">${T.faltaram}</div><div class="lbl">Faltas (${T.absent}%)</div></div>
+      <div class="card yellow"><div class="num">${T.ocupacao}%</div><div class="lbl">Ocupação das vagas</div></div>
+      <div class="card"><div class="num">${T.consultas.toLocaleString('pt-BR')}</div><div class="lbl">Consultas / OCI fechadas</div></div>
+      <div class="card"><div class="num">${T.mamografia}</div><div class="lbl">Mamografias</div></div>
+      <div class="card"><div class="num">${T.usg_mamaria}</div><div class="lbl">USG mamária</div></div>
+      <div class="card"><div class="num">${T.usg_transvaginal}</div><div class="lbl">USG transvaginal</div></div>
+    </div>
+    <div class="legend"><b>Atendimentos por dia</b> — evolução diária</div>
+    ${barChart(DADOS,"atendidas")}
+  </section>`);
+
+  // 3 - PENDÊNCIAS
+  slides.push(`<section class="slide">
+    <h2>🚩 Pendências Assistenciais</h2>
+    <div class="sub">Ninguém pode ficar para trás — levantamento nominal</div>
+    <div class="alert">Realizar levantamento <b>NOMINAL</b> das pendências antes da saída da carreta. Toda paciente com exame alterado precisa de destino definido na rede.</div>
+    ${[
+      ["Biópsias de mama a acompanhar", `${biopsias} pacientes (22/05, 29/05 e 01/06) — seguir fluxo de telemedicina pós-biópsia`],
+      ["Punções de mama (agulha grossa)", `${T.puncao_mama} pacientes — confirmar resultado e conduta`],
+      ["Biópsias de colo uterino", `${T.biopsia_colo} pacientes — verificar acompanhamento e agendamento`],
+      ["Pacientes BI-RADS 4 e 5", "Confirmar se TODAS estão na Navegação do Cuidado municipal"],
+      ["OCI não concluídas", "Levantamento nominal de usuárias que não fecharam a OCI"]
+    ].map(([t,d])=>`<div class="pend"><div class="dot"></div><div class="t">${t}</div><div class="d">${d}</div></div>`).join("")}
+  </section>`);
+
+  // 4 - SEGUIMENTO DE BIÓPSIAS (tabela)
+  let linhas = "", contador = 0;
+  DADOS.filter(r=>num(r.biopsia_mama)>0).forEach(r=>{
+    for(let j=0;j<num(r.biopsia_mama);j++){
+      contador++;
+      linhas += `<tr><td>Paciente ${String(contador).padStart(2,'0')}</td><td>Biópsia de mama</td><td>${r.dates}</td><td>—</td><td>☐ Sim&nbsp;&nbsp;☐ Não</td><td>&nbsp;</td></tr>`;
+    }
+  });
+  slides.push(`<section class="slide">
+    <h2>🔬 Seguimento de Biópsias</h2>
+    <div class="sub">Tabela de rastreabilidade — preencher de forma nominal (resultado em até 15 dias)</div>
+    <table><thead><tr><th>Paciente</th><th>Procedimento</th><th>Data</th><th>Resultado</th><th>Consulta agendada?</th><th>Responsável</th></tr></thead>
+    <tbody>${linhas}</tbody></table>
+    <div class="legend" style="margin-top:2vh">Verificar também: <b>${T.puncao_mama} punções de mama</b> e <b>${T.biopsia_colo} biópsias de colo uterino</b>. Cada paciente deve sair com consulta de telemedicina agendada.</div>
+  </section>`);
+
+  // 5 - FLUXO
+  const etapas = [
+    ["Realização da biópsia","Coletada na Unidade Móvel; material enviado para análise anatomopatológica."],
+    ["Liberação do resultado","Prazo estimado de até 15 dias após a biópsia."],
+    ["Agendamento da telemedicina","Regulador recebe por e-mail o link, data e horário da consulta."],
+    ["Convocação da paciente","Regulador contata a paciente, orienta local e documentos."],
+    ["Realização da telemedicina","Com Agente do Cuidado/enfermeiro; médico define a conduta."],
+    ["Encaminhamento de documentos","Resultado, guia de acompanhamento e solicitação de tratamento."],
+    ["Continuidade do cuidado","Regulação + APS garantem encaminhamento e monitoramento."]
+  ];
+  slides.push(`<section class="slide">
+    <h2>🔄 Fluxo de Atendimento Pós-Biópsia</h2>
+    <div class="sub">Telemedicina — percurso da paciente</div>
+    <div class="flow">${etapas.map((e,i)=>`<div class="step"><div class="n">${i+1}</div><div class="t">${e[0]}</div><div class="d">${e[1]}</div></div>`).join("")}</div>
+  </section>`);
+
+  // 6 - CONTATOS
+  slides.push(`<section class="slide">
+    <h2>📇 Contatos Estratégicos</h2>
+    <div class="sub">Garantir o handoff e a rastreabilidade dos encaminhamentos</div>
+    <div class="contacts">
+      <div class="cbox blue"><h3>Ponto focal — REGULAÇÃO</h3><p>Nome: __________________<br>Telefone: ________________<br>E-mail: __________________</p></div>
+      <div class="cbox green"><h3>Ponto focal — APS</h3><p>Nome: __________________<br>Telefone: ________________<br>E-mail: __________________</p></div>
+    </div>
+    <div class="alert red">⚠ GARANTIR A RASTREABILIDADE DE TODOS OS ENCAMINHAMENTOS · Ativar o NGC e registrar os pontos focais.</div>
+    <div class="legend">Solicitar também: filas zeradas (COGEC) · acesso do município aos laudos dentro da carreta · confirmação dos dados oficiais (MS).</div>
+  </section>`);
+
+  // 7 - MATRIZ
+  const matriz = [
+    ["Levantamento de pendências (OCI/biópsias)","Apoia","Consolida","Executa busca ativa"],
+    ["Agendamento da telemedicina","Disponibiliza link","Convoca paciente","Acompanha consulta"],
+    ["Acompanhamento BI-RADS 4 e 5","Orienta","Regula vagas","Navegação do Cuidado"],
+    ["Encaminhamento p/ tratamento","—","Garante vaga na rede","Monitora paciente"],
+    ["Rastreabilidade / registro","Define padrão","Registra no sistema","Atualiza prontuário"],
+    ["Acesso a laudos e dados","Repassa acessos","Recebe e distribui","Utiliza no cuidado"]
+  ];
+  slides.push(`<section class="slide">
+    <h2>🧩 Matriz de Responsáveis</h2>
+    <div class="sub">Quem faz o quê na continuidade do cuidado — validar linha a linha</div>
+    <table class="matrix"><thead><tr><th>Ação</th><th>AgSUS</th><th>Regulação Municipal</th><th>APS / Atenção Básica</th></tr></thead>
+    <tbody>${matriz.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("")}</tbody></table>
+  </section>`);
+
+  // 8 - CONTINUIDADE
+  const passos = [
+    "Concluir levantamento nominal de pendências (OCI e biópsias)",
+    `Confirmar agendamento da telemedicina para as ${biopsias} biópsias de mama (resultado em até 15 dias)`,
+    "Garantir acompanhamento das pacientes BI-RADS 4 e 5 pela Navegação do Cuidado",
+    "Registrar pontos focais (Regulação e APS) e ativar o NGC",
+    "Solicitar filas zeradas à COGEC e repassar acesso aos laudos da carreta",
+    "Definir responsável municipal pelo monitoramento da continuidade"
+  ];
+  slides.push(`<section class="slide">
+    <h2>✅ Plano de Continuidade</h2>
+    <div class="sub">Próximos passos acordados — atribuir responsável e prazo</div>
+    ${passos.map((p,i)=>`<div class="next"><div class="n">${i+1}</div><div class="t">${p}</div></div>`).join("")}
+  </section>`);
+
+  // 9 - ENCERRAMENTO
+  slides.push(`<section class="slide end">
+    <div class="circle"></div>
+    <div class="ty">OBRIGADA!</div>
+    <p>Unidade de Atenção Especializada<br>Diretoria de Atenção Integral à Saúde<br>Agência Brasileira de Apoio à Gestão do SUS</p>
+    <div class="ct">atencaoespecializada@agenciasus.org.br<br>+55 (61) 3686.1010 · https://agenciasus.org.br/</div>
+  </section>`);
+
+  document.getElementById("deck").innerHTML = slides.join("");
+  document.getElementById("tot").textContent = slides.length;
+  show(0);
+}
+
+/* ============================================================
+   NAVEGAÇÃO
+   ============================================================ */
+let idx = 0;
+function show(i){
+  const sl = document.querySelectorAll(".slide");
+  idx = Math.max(0, Math.min(i, sl.length-1));
+  sl.forEach((s,k)=>s.classList.toggle("active", k===idx));
+  document.getElementById("cur").textContent = idx+1;
+  document.getElementById("progress").style.width = ((idx+1)/sl.length*100)+"%";
+}
+function go(d){ show(idx+d); }
+document.addEventListener("keydown", e=>{
+  if(["ArrowRight","ArrowDown"," ","PageDown"].includes(e.key)) go(1);
+  if(["ArrowLeft","ArrowUp","PageUp"].includes(e.key)) go(-1);
+  if(e.key==="Home") show(0);
+  if(e.key==="End") show(999);
+});
+// Detecta toque (celular/tablet) para ajustar a navegação
+const isTouch = window.matchMedia("(pointer:coarse)").matches || "ontouchstart" in window;
+let touchMoved = false;
+
+document.getElementById("deck").addEventListener("click", e=>{
+  if(e.target.closest("button")) return;
+  // No celular não navega por toque simples (evita avançar ao ler) — usa swipe/botões
+  if(isTouch) return;
+  go(e.clientX > window.innerWidth/2 ? 1 : -1);
+});
+
+// ---- Navegação por deslize (swipe) no celular ----
+let tsX=0, tsY=0;
+document.addEventListener("touchstart", e=>{
+  tsX = e.changedTouches[0].clientX; tsY = e.changedTouches[0].clientY; touchMoved=false;
+}, {passive:true});
+document.addEventListener("touchmove", ()=>{ touchMoved=true; }, {passive:true});
+document.addEventListener("touchend", e=>{
+  const dx = e.changedTouches[0].clientX - tsX;
+  const dy = e.changedTouches[0].clientY - tsY;
+  // só conta como swipe se for horizontal e dominante (não atrapalha a rolagem vertical)
+  if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)*1.5){
+    go(dx < 0 ? 1 : -1);
+  }
+}, {passive:true});
+
+/* ============================================================
+   FETCH AO VIVO (opcional) — se o servidor do dashboard estiver no ar
+   ============================================================ */
+async function tentarAoVivo(){
+  try{
+    const ctrl = new AbortController();
+    const tmr = setTimeout(()=>ctrl.abort(), 1500);
+    const r = await fetch(CONFIG.apiUrl, {signal:ctrl.signal});
+    clearTimeout(tmr);
+    const j = await r.json();
+    if(j && j.success && Array.isArray(j.data) && j.data.length){
+      DADOS = j.data;
+      document.getElementById("liveDot").classList.add("on");
+      document.getElementById("srcLabel").textContent = "Dados AO VIVO do servidor (atualizado)";
+      render();
+    }
+  }catch(_){ /* mantém dados locais embutidos */ }
+}
+
+render();
+tentarAoVivo();
+</script>
+</body>
+</html>
