@@ -3,11 +3,18 @@ const fs = require('fs');
 const path = require('path');
 
 let admin;
+let getFirestore;
 let isFirebaseConfigured = false;
 let db = null;
 
+// ID do banco Firestore. Neste projeto o banco foi criado com o nome "default"
+// (banco nomeado), e NÃO como o banco padrão "(default)". Por isso é necessário
+// especificá-lo explicitamente; caso contrário o SDK retorna erro 5 NOT_FOUND.
+const FIRESTORE_DATABASE_ID = process.env.FIREBASE_DATABASE_ID || 'default';
+
 try {
     admin = require('firebase-admin');
+    getFirestore = require('firebase-admin/firestore').getFirestore;
     
     const CREDENTIALS_PATH = path.join(__dirname, 'firebase-credentials.json');
 
@@ -47,7 +54,8 @@ try {
     }
 
     if (isFirebaseConfigured) {
-        db = admin.firestore();
+        db = getFirestore(admin.app(), FIRESTORE_DATABASE_ID);
+        console.log(`Conectado ao banco Firestore: "${FIRESTORE_DATABASE_ID}".`);
     }
 } catch (err) {
     console.warn('AVISO: O pacote "firebase-admin" não está instalado ou falhou ao carregar. Rodando no modo de armazenamento local. Erro:', err.message);
