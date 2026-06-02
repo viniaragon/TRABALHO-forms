@@ -2,11 +2,79 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
+let admin;
+let isFirebaseConfigured = false;
+let db = null;
+
+try {
+    admin = require('firebase-admin');
+    
+    const CREDENTIALS_PATH = path.join(__dirname, 'firebase-credentials.json');
+
+    if (fs.existsSync(CREDENTIALS_PATH)) {
+        const serviceAccount = require(CREDENTIALS_PATH);
+        if (admin.apps.length === 0) {
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+        }
+        isFirebaseConfigured = true;
+        console.log('Firebase inicializado usando arquivo local de credenciais (firebase-credentials.json).');
+    } else if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL) {
+        const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+        if (admin.apps.length === 0) {
+            admin.initializeApp({
+                credential: admin.credential.cert({
+                    projectId: process.env.FIREBASE_PROJECT_ID,
+                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                    privateKey: privateKey,
+                })
+            });
+        }
+        isFirebaseConfigured = true;
+        console.log('Firebase inicializado usando variáveis de ambiente.');
+    } else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        if (admin.apps.length === 0) {
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+        }
+        isFirebaseConfigured = true;
+        console.log('Firebase inicializado usando JSON stringificado de variável de ambiente.');
+    } else {
+        console.log('Modo de armazenamento local ativo: Nenhuma credencial do Firebase configurada.');
+    }
+
+    if (isFirebaseConfigured) {
+        db = admin.firestore();
+    }
+} catch (err) {
+    console.warn('AVISO: O pacote "firebase-admin" não está instalado ou falhou ao carregar. Rodando no modo de armazenamento local. Erro:', err.message);
+    isFirebaseConfigured = false;
+}
+
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const FILE_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'formes base consolidados.md');
+const DEFAULT_FILE_PATH = path.join(__dirname, 'formes base consolidados.md');
+const FILE_PATH = process.env.DATABASE_PATH || DEFAULT_FILE_PATH;
+
+// Se DATABASE_PATH for definido (ex: volume persistente no Zeabur) e o arquivo não existir lá,
+// inicializamos copiando o arquivo consolidado padrão do repositório para evitar que comece vazio.
+if (process.env.DATABASE_PATH && !fs.existsSync(FILE_PATH) && fs.existsSync(DEFAULT_FILE_PATH)) {
+    try {
+        const parentDir = path.dirname(FILE_PATH);
+        if (!fs.existsSync(parentDir)) {
+            fs.mkdirSync(parentDir, { recursive: true });
+        }
+        fs.copyFileSync(DEFAULT_FILE_PATH, FILE_PATH);
+        console.log(`Banco de dados consolidado inicial copiado para: ${FILE_PATH}`);
+    } catch (err) {
+        console.error(`Erro ao inicializar arquivo no volume persistente:`, err);
+    }
+}
 
 // Estrutura de campos mapeada exatamente na ordem em que aparecem no Markdown
 const FIELDS = [
@@ -144,10 +212,20 @@ function writeData(records) {
 }
 
 // Endpoint GET: Retornar todos os registros
-app.get('/api/data', (req, res) => {
+app.get('/api/data', async (req, res) => {
     try {
-        const records = readData();
-        res.json({ success: true, data: records });
+        if (isFirebaseConfigured && db) {
+            const snapshot = await db.collection('daily_records').get();
+            const records = [];
+            snapshot.forEach(doc => {
+                records.push(doc.data());
+            });
+            const sorted = sortRecords(records);
+            res.json({ success: true, data: sorted });
+        } else {
+            const records = readData();
+            res.json({ success: true, data: records });
+        }
     } catch (error) {
         console.error('Erro ao ler os dados:', error);
         res.status(500).json({ success: false, message: 'Erro ao carregar os dados.' });
@@ -155,7 +233,7 @@ app.get('/api/data', (req, res) => {
 });
 
 // Endpoint POST: Salvar ou atualizar registro diário
-app.post('/api/save', (req, res) => {
+app.post('/api/save', async (req, res) => {
     try {
         const newRecord = req.body;
         
@@ -163,26 +241,80 @@ app.post('/api/save', (req, res) => {
             return res.status(400).json({ success: false, message: 'Data inválida. Use o formato DD/MM/AAAA.' });
         }
 
-        let records = readData();
-        
-        // Verifica se já existe um registro para a data e substitui, ou cria um novo
-        const existingIndex = records.findIndex(r => r.dates === newRecord.dates);
-        if (existingIndex !== -1) {
-            records[existingIndex] = { ...records[existingIndex], ...newRecord };
-        } else {
-            records.push(newRecord);
-        }
+        if (isFirebaseConfigured && db) {
+            // IDs de documentos do Firestore não podem conter "/"
+            const docId = newRecord.dates.replace(/\//g, '-');
+            await db.collection('daily_records').doc(docId).set(newRecord, { merge: true });
+            
+            // Buscar todos para retornar atualizados
+            const snapshot = await db.collection('daily_records').get();
+            const records = [];
+            snapshot.forEach(doc => {
+                records.push(doc.data());
+            });
+            const sorted = sortRecords(records);
+            
+            // Backup opcional local no arquivo Markdown
+            try {
+                writeData(sorted);
+            } catch (err) {
+                console.warn('Falha ao atualizar backup do Markdown local:', err.message);
+            }
 
-        writeData(records);
-        res.json({ success: true, message: 'Dados salvos com sucesso!', data: readData() });
+            res.json({ success: true, message: 'Dados salvos no Firebase com sucesso!', data: sorted });
+        } else {
+            let records = readData();
+            
+            // Verifica se já existe um registro para a data e substitui, ou cria um novo
+            const existingIndex = records.findIndex(r => r.dates === newRecord.dates);
+            if (existingIndex !== -1) {
+                records[existingIndex] = { ...records[existingIndex], ...newRecord };
+            } else {
+                records.push(newRecord);
+            }
+
+            writeData(records);
+            res.json({ success: true, message: 'Dados salvos localmente com sucesso!', data: readData() });
+        }
     } catch (error) {
         console.error('Erro ao salvar os dados:', error);
         res.status(500).json({ success: false, message: 'Erro ao salvar os dados.' });
     }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
+// Função para migração automática do banco local para o Firestore
+async function migrateIfNeeded() {
+    if (!isFirebaseConfigured || !db) return;
+    try {
+        const recordsCol = db.collection('daily_records');
+        const snapshot = await recordsCol.limit(1).get();
+        if (snapshot.empty) {
+            console.log('Banco de dados do Firestore está vazio. Verificando dados locais para migração...');
+            const localRecords = readData();
+            if (localRecords.length > 0) {
+                console.log(`Iniciando migração de ${localRecords.length} registros para o Firestore...`);
+                const batch = db.batch();
+                localRecords.forEach(record => {
+                    const docId = record.dates.replace(/\//g, '-');
+                    const docRef = recordsCol.doc(docId);
+                    batch.set(docRef, record);
+                });
+                await batch.commit();
+                console.log('Migração concluída com sucesso!');
+            } else {
+                console.log('Nenhum dado local encontrado para migração.');
+            }
+        } else {
+            console.log('Firestore já contém dados. Migração automática ignorada.');
+        }
+    } catch (err) {
+        console.error('Erro durante a migração para o Firestore:', err);
+    }
+}
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
     console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Acesse http://localhost:${PORT}`);
+    // Tenta migrar os dados locais se o Firebase estiver configurado
+    await migrateIfNeeded();
 });
