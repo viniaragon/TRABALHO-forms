@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Carreta Saúde da Mulher</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for beautiful icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Header -->
+        <header class="main-header">
+            <div class="logo-area">
+                <div class="icon-pulse">
+                    <i class="fa-solid fa-truck-medical"></i>
+                </div>
+                <div>
+                    <h1>Carreta Saúde da Mulher</h1>
+                    <p class="subtitle">Consolidação de Indicadores Diários</p>
+                </div>
+            </div>
+            
+            <div class="actions-area">
+                <button id="btnOpenModal" class="btn btn-primary btn-glow">
+                    <i class="fa-solid fa-plus"></i> Novo Dia
+                </button>
+            </div>
+        </header>
+
+        <!-- Controls Toolbar (Filters) -->
+        <section class="controls-toolbar glass-panel">
+            <div class="filter-group">
+                <label for="dateModeSelect"><i class="fa-solid fa-filter"></i> Modo de Filtro</label>
+                <select id="dateModeSelect" class="form-control">
+                    <option value="single">Data Única</option>
+                    <option value="range">Período Personalizado</option>
+                    <option value="all" selected>Histórico Completo (Acumulado)</option>
+                </select>
+            </div>
+
+            <!-- Single Date Selector -->
+            <div id="singleDateGroup" class="filter-group hide">
+                <label for="singleDateSelect"><i class="fa-solid fa-calendar-day"></i> Selecionar Dia</label>
+                <div class="nav-date-container">
+                    <button id="btnPrevDate" class="btn btn-icon" title="Dia Anterior"><i class="fa-solid fa-chevron-left"></i></button>
+                    <select id="singleDateSelect" class="form-control"></select>
+                    <button id="btnNextDate" class="btn btn-icon" title="Próximo Dia"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <!-- Date Range Selector -->
+            <div id="rangeDateGroup" class="filter-group range-group hide">
+                <div class="date-input-wrap">
+                    <label for="startDateInput">De</label>
+                    <input type="date" id="startDateInput" class="form-control">
+                </div>
+                <div class="date-input-wrap">
+                    <label for="endDateInput">Até</label>
+                    <input type="date" id="endDateInput" class="form-control">
+                </div>
+                <button id="btnApplyRange" class="btn btn-secondary">Aplicar</button>
+            </div>
+
+            <div class="stats-label-container">
+                <span class="badge" id="periodDisplay">Período: Histórico Completo</span>
+            </div>
+        </section>
+
+        <!-- KPI Grid Summary -->
+        <main class="dashboard-content">
+            <section class="kpi-grid">
+                <!-- KPI 1: Agendados -->
+                <div class="kpi-card glass-panel border-purple">
+                    <div class="kpi-icon icon-bg-purple">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <h3>Agendados</h3>
+                        <div class="kpi-value" id="kpiAgendados">0</div>
+                        <p class="kpi-subtext" id="kpiAgendadosSub">Média diária: --</p>
+                    </div>
+                </div>
+
+                <!-- KPI 2: Atendidos -->
+                <div class="kpi-card glass-panel border-green">
+                    <div class="kpi-icon icon-bg-green">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <h3>Atendidos</h3>
+                        <div class="kpi-value" id="kpiAtendidos">0</div>
+                        <p class="kpi-subtext" id="kpiAtendidosSub">Taxa de presença: --</p>
+                    </div>
+                </div>
+
+                <!-- KPI 3: Faltas -->
+                <div class="kpi-card glass-panel border-red">
+                    <div class="kpi-icon icon-bg-red">
+                        <i class="fa-solid fa-circle-xmark"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <h3>Faltas (Absenteísmo)</h3>
+                        <div class="kpi-value" id="kpiFaltas">0</div>
+                        <p class="kpi-subtext" id="kpiFaltasSub">Taxa de absenteísmo: --</p>
+                    </div>
+                </div>
+
+                <!-- KPI 4: Ocupação -->
+                <div class="kpi-card glass-panel border-blue">
+                    <div class="kpi-icon icon-bg-blue">
+                        <i class="fa-solid fa-percent"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <h3>Aproveitamento de Vagas</h3>
+                        <div class="kpi-value" id="kpiOcupacao">0%</div>
+                        <p class="kpi-subtext" id="kpiOcupacaoSub">Vagas ofertadas: --</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Detailed Procedures & Charts Grid -->
+            <section class="details-grid">
+                <!-- Left Column: Charts -->
+                <div class="grid-col charts-col">
+                    <div class="glass-panel chart-wrapper">
+                        <div class="panel-header">
+                            <h2><i class="fa-solid fa-chart-line"></i> Fluxo de Atendimentos e Faltas</h2>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel chart-wrapper">
+                        <div class="panel-header">
+                            <h2><i class="fa-solid fa-chart-pie"></i> Distribuição Geral de Exames</h2>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="proceduresChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Procedure Cards -->
+                <div class="grid-col procedures-col">
+                    <div class="glass-panel procedures-wrapper">
+                        <div class="panel-header">
+                            <h2><i class="fa-solid fa-stethoscope"></i> Consultas & Procedimentos</h2>
+                        </div>
+                        
+                        <div class="procedures-list">
+                            <!-- Consulta Médica -->
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-user-doctor"></i></span>
+                                    <div>
+                                        <span class="proc-name">Consultas Médicas</span>
+                                        <span class="proc-desc">Atendimentos clínicos gerais</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valConsultas">0</span>
+                            </div>
+
+                            <!-- OCI Fechadas -->
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-file-invoice"></i></span>
+                                    <div>
+                                        <span class="proc-name">OCIs Fechadas</span>
+                                        <span class="proc-desc">Guias consolidadas</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valOciFechadas">0</span>
+                            </div>
+
+                            <!-- Mamografia -->
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-x-ray"></i></span>
+                                    <div>
+                                        <span class="proc-name">Mamografias</span>
+                                        <span class="proc-desc">Exames radiológicos de mama</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valMamografia">0</span>
+                            </div>
+
+                            <!-- Colposcopia -->
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-eye"></i></span>
+                                    <div>
+                                        <span class="proc-name">Colposcopias</span>
+                                        <span class="proc-desc">Exame do colo do útero</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valColposcopia">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ultrassonografias -->
+                    <div class="glass-panel procedures-wrapper">
+                        <div class="panel-header">
+                            <h2><i class="fa-solid fa-wave-square"></i> Ultrassonografias (USG)</h2>
+                        </div>
+                        <div class="procedures-list">
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-circle-radiation"></i></span>
+                                    <div>
+                                        <span class="proc-name">USG Mamária</span>
+                                        <span class="proc-desc">Ultrassom de mama</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valUsgMamaria">0</span>
+                            </div>
+
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-venus"></i></span>
+                                    <div>
+                                        <span class="proc-name">USG Transvaginal</span>
+                                        <span class="proc-desc">Ultrassom ginecológico interno</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valUsgTransvaginal">0</span>
+                            </div>
+
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-person-breastfeeding"></i></span>
+                                    <div>
+                                        <span class="proc-name">USG Pélvica</span>
+                                        <span class="proc-desc">Ultrassom pélvico externo</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valUsgPelvica">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Biópsias e Agulha Grossa -->
+                    <div class="glass-panel procedures-wrapper">
+                        <div class="panel-header">
+                            <h2><i class="fa-solid fa-microscope"></i> Biópsias e Punções</h2>
+                        </div>
+                        <div class="procedures-list">
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-syringe"></i></span>
+                                    <div>
+                                        <span class="proc-name">Punção de Mama (Agulha Grossa)</span>
+                                        <span class="proc-desc">Procedimentos de punção mamária</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valPuncaoMama">0</span>
+                            </div>
+
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-dna"></i></span>
+                                    <div>
+                                        <span class="proc-name">Biópsia de Mama</span>
+                                        <span class="proc-desc">Anatomopatológico de Mama</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valBiopsiaMama">0</span>
+                            </div>
+
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-vial"></i></span>
+                                    <div>
+                                        <span class="proc-name">Biópsia do Colo Uterino</span>
+                                        <span class="proc-desc">Procedimentos cirúrgicos de colo</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valBiopsiaColo">0</span>
+                            </div>
+
+                            <div class="procedure-item">
+                                <div class="proc-details">
+                                    <span class="proc-icon"><i class="fa-solid fa-vials"></i></span>
+                                    <div>
+                                        <span class="proc-name">Biópsia Colo (Anatomopatológico)</span>
+                                        <span class="proc-desc">Análise laboratorial de colo</span>
+                                    </div>
+                                </div>
+                                <span class="proc-val" id="valBiopsiaColoAnatomopatologico">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Form: Adicionar/Editar Registro -->
+    <div id="recordModal" class="modal-overlay hide">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-calendar-plus"></i> Lançar Dados Diários</h2>
+                <button id="btnCloseModal" class="btn-close">&times;</button>
+            </div>
+            
+            <form id="recordForm">
+                <div class="form-grid">
+                    <!-- General & Dates -->
+                    <div class="form-section span-2">
+                        <h3><i class="fa-solid fa-circle-info"></i> Informações Gerais</h3>
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="formDate">Data de preenchimento *</label>
+                                <input type="date" id="formDate" required class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="formResponsavel">Nome do Responsável</label>
+                                <input type="text" id="formResponsavel" placeholder="Ex: Vinícius" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Flow stats -->
+                    <div class="form-section span-2">
+                        <h3><i class="fa-solid fa-users-gear"></i> Fluxo de Pacientes</h3>
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="formVagas">Vagas Ofertadas *</label>
+                                <input type="number" id="formVagas" required min="0" value="70" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="formAgendadas">Pessoas Agendadas *</label>
+                                <input type="number" id="formAgendadas" required min="0" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="formAtendidas">Pessoas Atendidas *</label>
+                                <input type="number" id="formAtendidas" required min="0" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="formFaltaram">Pessoas Faltantes *</label>
+                                <input type="number" id="formFaltaram" required min="0" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Consultas and USG -->
+                    <div class="form-section">
+                        <h3><i class="fa-solid fa-stethoscope"></i> Consultas e Ultrassons</h3>
+                        <div class="form-group">
+                            <label for="formConsultas">Consultas Médicas *</label>
+                            <input type="number" id="formConsultas" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formOci">OCIs Fechadas *</label>
+                            <input type="number" id="formOci" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formUsgMamaria">USG Mamária *</label>
+                            <input type="number" id="formUsgMamaria" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formUsgTransvaginal">USG Transvaginal *</label>
+                            <input type="number" id="formUsgTransvaginal" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formUsgPelvica">USG Pélvica *</label>
+                            <input type="number" id="formUsgPelvica" required min="0" class="form-control">
+                        </div>
+                    </div>
+
+                    <!-- Mammogram and Biopsies -->
+                    <div class="form-section">
+                        <h3><i class="fa-solid fa-microscope"></i> Mamografia e Procedimentos</h3>
+                        <div class="form-group">
+                            <label for="formMamografia">Mamografia *</label>
+                            <input type="number" id="formMamografia" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formColposcopia">Colposcopia *</label>
+                            <input type="number" id="formColposcopia" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formPuncaoMama">Punção Mama (Agulha Grossa) *</label>
+                            <input type="number" id="formPuncaoMama" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formBiopsiaMama">Biópsia de Mama *</label>
+                            <input type="number" id="formBiopsiaMama" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formBiopsiaColo">Biópsia Colo Uterino *</label>
+                            <input type="number" id="formBiopsiaColo" required min="0" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="formBiopsiaColoAnatomo">Biópsia Colo (Anatomopatológico) *</label>
+                            <input type="number" id="formBiopsiaColoAnatomo" required min="0" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" id="btnCancelModal" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Gravar Lançamento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hide"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

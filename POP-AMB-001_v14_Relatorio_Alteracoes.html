@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Relatório de Alterações | POP-AMB-001 v14</title>
+  <!-- Google Fonts para interface moderna -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Estilos da Interface de Visualização (Não impressos) */
+    :root {
+      --bg-gradient-start: #0f172a;
+      --bg-gradient-end: #1e293b;
+      --primary-color: #007bff;
+      --primary-hover: #0056b3;
+      --success-color: #10b981;
+      --success-hover: #059669;
+      --text-muted: #94a3b8;
+      --panel-bg: rgba(30, 41, 59, 0.7);
+      --panel-border: rgba(255, 255, 255, 0.1);
+      --alert-warning-bg: #fffbeb;
+      --alert-warning-border: #fef3c7;
+      --alert-warning-text: #92400e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    header.control-panel {
+      width: 100%;
+      max-width: 1000px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-title h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 600;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-title p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .actions-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border: none;
+      text-decoration: none;
+      color: #fff;
+    }
+
+    .btn-primary {
+      background: var(--primary-color);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    }
+
+    .btn-success {
+      background: var(--success-color);
+    }
+
+    .btn-success:hover {
+      background: var(--success-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Estilos do Documento de Relatório (A4 Simulado) */
+    .document-container {
+      width: 100%;
+      max-width: 1000px;
+      background: #ffffff;
+      color: #000000;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      border-radius: 8px;
+      padding: 2.0cm 2.0cm 2.0cm 3.0cm; /* Margens Oficiais: Topo 2cm, Direita 2cm, Inferior 2cm, Esquerda 3cm */
+      font-family: Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.15;
+      position: relative;
+      overflow-x: auto;
+    }
+
+    /* Formatação Interna */
+    .report-header {
+      text-align: center;
+      font-weight: bold;
+      border-bottom: 2px solid #000;
+      padding-bottom: 12px;
+      margin-bottom: 25px;
+      text-transform: uppercase;
+      font-size: 11pt;
+    }
+
+    .report-header p {
+      margin-bottom: 2px;
+    }
+
+    .report-title {
+      font-size: 14pt;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 25px;
+      text-transform: uppercase;
+      color: #000;
+    }
+
+    h2 {
+      font-size: 12pt;
+      font-weight: bold;
+      margin-top: 25px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      border-bottom: 2px solid #000;
+      padding-bottom: 2px;
+    }
+
+    h3 {
+      font-size: 11pt;
+      font-weight: bold;
+      margin-top: 15px;
+      margin-bottom: 6px;
+      color: #333;
+    }
+
+    p.content-paragraph {
+      margin-bottom: 12px;
+      text-align: justify;
+    }
+
+    ul, ol {
+      margin-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    li {
+      margin-bottom: 6px;
+      text-align: justify;
+    }
+
+    /* Tabelas comparativas */
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0 25px 0;
+    }
+
+    .compare-table th, .compare-table td {
+      border: 1px solid #000000;
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 10pt;
+    }
+
+    .compare-table th {
+      background-color: #f2f2f2;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .compare-table tr.highlight {
+      background-color: #fafafa;
+    }
+
+    /* Avisos e Caixas de Alerta no estilo Word */
+    .alert-box {
+      border-left: 4px solid #b45309;
+      background-color: #fffbeb;
+      padding: 12px;
+      margin: 15px 0;
+      font-size: 10pt;
+    }
+
+    .alert-box strong {
+      color: #78350f;
+    }
+
+    /* Assinaturas */
+    .signatures-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 40px;
+    }
+
+    .signatures-table td {
+      border: 1px solid #000000;
+      padding: 15px 10px;
+      text-align: center;
+      vertical-align: top;
+      font-size: 9.5pt;
+      width: 50%;
+    }
+
+    .signatures-table .line {
+      margin-top: 35px;
+      border-top: 1px solid #000000;
+      padding-top: 4px;
+    }
+
+    /* Estilos Específicos de Impressão */
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 0 !important;
+      }
+
+      header.control-panel {
+        display: none !important;
+      }
+
+      .document-container {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      @page {
+        size: A4;
+        margin: 2.0cm 2.0cm 2.0cm 3.0cm; /* Margens Word: Sup 2, Dir 2, Inf 2, Esq 3 */
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Painel de Controle (Invisível na impressão) -->
+  <header class="control-panel">
+    <div class="brand-section">
+      <div class="brand-title">
+        <h1>Relatório de Alterações | POP-AMB-001 v14</h1>
+        <p>Justificativas técnicas e legais das revisões efetuadas no projeto inicial</p>
+      </div>
+      <div class="actions-group">
+        <button class="btn btn-success" onclick="exportToWord()">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          Exportar para Word (.doc)
+        </button>
+        <button class="btn btn-primary" onclick="window.print()">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-3a2 2 0 00-2-2H9a2 2 0 00-2 2v3a2 2 0 002 2zm5-17v2m-6 0h2"></path>
+          </svg>
+          Imprimir / Salvar em PDF
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Documento Oficial (Visualizado em Tela / Formatado para Impressão) -->
+  <main class="document-container" id="report-document">
+    
+    <!-- Cabeçalho Oficial SUS / MS -->
+    <div class="report-header">
+      <p>Ministério da Saúde</p>
+      <p>Secretaria de Atenção Especializada à Saúde</p>
+      <p>Programa Agora Tem Especialista - Saúde da Mulher</p>
+      <p>Unidade Móvel 63</p>
+    </div>
+
+    <!-- Título do Relatório -->
+    <div class="report-title">
+      Relatório de Revisão e Justificativas de Alterações<br>
+      <span style="font-size: 11pt; font-weight: normal; text-transform: none;">Documento de Referência: POP-AMB-001 | Versão: 14</span>
+    </div>
+
+    <!-- 1. INTRODUÇÃO -->
+    <h2>1. Introdução</h2>
+    <p class="content-paragraph">
+      Este relatório tem como objetivo detalhar, justificar e fundamentar as alterações realizadas no rascunho inicial do Procedimento Operacional Padrão (POP-AMB-001, Versão 14) para a Unidade Móvel 63. A revisão técnica foi realizada para alinhar os fluxos de trabalho assistenciais e administrativos com as normas regulamentadoras da ANVISA, as resoluções vigentes dos conselhos profissionais de classe (CFM e COFEN) e as diretrizes clínicas de segurança do paciente do Ministério da Saúde.
+    </p>
+
+    <!-- 2. RESUMO DAS ALTERAÇÕES -->
+    <h2>2. Resumo das Alterações Efetuadas</h2>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th style="width: 25%;">Seção do POP</th>
+          <th style="width: 35%;">Como estava no Rascunho Inicial</th>
+          <th style="width: 40%;">Como ficou na Versão Otimizada</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Controle de Assinaturas & RT</strong></td>
+          <td>Apenas a Enfermeira Fabiana Leite como elaboradora e coordenadora (RT Geral).</td>
+          <td><strong>RT Compartilhada:</strong> Enfermeira como Responsável Técnica de Enfermagem e inclusão de espaço para o <strong>Diretor Técnico Médico</strong>.</td>
+        </tr>
+        <tr class="highlight">
+          <td><strong>Reprocessamento de Insumos (CME)</strong></td>
+          <td>Direcionava agulhas de Core Biopsy e alças de LEEP para esterilização/rastreio na CME.</td>
+          <td>Agulhas e alças classificadas como <strong>Uso Único Descartáveis</strong>. Descarte imediato e rastreabilidade pelo registro de lote no prontuário.</td>
+        </tr>
+        <tr>
+          <td><strong>Preparo de Exames e Jejum</strong></td>
+          <td>Instrução de manter jejum para USG pélvica, mamografia e biópsias, com distribuição de lanches posteriores.</td>
+          <td><strong>Remoção do Jejum Alimentar</strong>. Recomenda-se alimentação normal. O lanche passa a ser suporte pós-procedimento contra reações vagais.</td>
+        </tr>
+        <tr class="highlight">
+          <td><strong>Fluxo de BI-RADS 4 e 5</strong></td>
+          <td>Fluxo genérico de direcionamento de mamografia alterada para ultrassonografia e agendamento de Core Biopsy.</td>
+          <td>Adicionado fluxo para <strong>lesões não correlacionáveis ao USG</strong> (invisíveis ao USG), com encaminhamento para estereotaxia hospitalar.</td>
+        </tr>
+        <tr>
+          <td><strong>Amostras de Patologia</strong></td>
+          <td>Mencionava apenas o envio físico das amostras ao laboratório AC Camargo.</td>
+          <td>Exigência de transporte em <strong>embalagem tríplice normatizada</strong> (Categoria B, UN 3373) em frascos de boca larga com formol 10%.</td>
+        </tr>
+        <tr class="highlight">
+          <td><strong>TI, Conectividade e LGPD</strong></td>
+          <td>Foco exclusivo em backups digitais e segurança de rede.</td>
+          <td>Inclusão do **Protocolo de Contingência Sem Conectividade** (uso de papel) e regras de guarda/descarte de dados sensíveis físicos.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 3. DETALHAMENTO E JUSTIFICATIVAS -->
+    <h2>3. Detalhamento e Justificativas das Mudanças</h2>
+
+    <h3>3.1. Responsabilidade Técnica (RT) Médica e de Enfermagem</h3>
+    <p class="content-paragraph">
+      <strong>Por que foi alterado?</strong> De acordo com a <strong>Resolução CFM nº 2.147/2016</strong>, todo estabelecimento que realiza prestação de assistência médica (o que inclui biópsias, exames de diagnóstico por imagem laudados e consultas ginecológicas/mastológicas) é obrigado a ter um médico registrado no CRM local como seu Diretor Técnico Médico.
+    </p>
+    <div class="alert-box">
+      <strong>Risco Legal Mitigado:</strong> O modelo inicial atribuía toda a responsabilidade sanitária e de intercorrências à Enfermeira Fabiana Leite. Sob a ótica do <strong>COFEN (Resolução nº 509/2016)</strong>, a enfermeira só responde tecnicamente pelas ações da equipe de enfermagem (biossegurança, CME, cuidados assistenciais). Ela não pode responder legalmente pelas condutas de diagnóstico ou complicações operatórias médicas. A divisão de assinaturas protege juridicamente a enfermeira e a unidade.
+    </div>
+
+    <h3>3.2. Proibição de Reprocessamento de Agulhas e Alças de LEEP</h3>
+    <p class="content-paragraph">
+      <strong>Por que foi alterado?</strong> As agulhas grossas de Core Biopsy (14G/16G) e as alças cirúrgicas diatérmicas de LEEP são materiais classificados pela ANVISA como de <strong>Uso Único</strong>. A <strong>RDC nº 156/2006</strong> proíbe terminantemente a esterilização, o reprocessamento ou o reuso desses insumos.
+    </p>
+    <p class="content-paragraph">
+      <strong>Nova Conduta:</strong> A "rastreabilidade" desses itens agora é realizada registrando a marca, o número do lote e a validade da agulha no prontuário eletrônico e na guia APAC de faturamento da paciente, com o descarte imediato do insumo após o uso no coletor rígido de perfurocortantes (Descarpack). A CME da unidade passa a triar exclusivamente os instrumentais de aço reutilizáveis (como as pinças de biópsia de colo Tischler e espéculos metálicos).
+    </p>
+
+    <h3>3.3. Segurança Clínica: Remoção de Jejum Desnecessário</h3>
+    <p class="content-paragraph">
+      <strong>Por que foi alterado?</strong> Exames de mamografia, ultrassonografia transvaginal, ultrassonografia de mama e ultrassonografia pélvica ginecológica **não requerem jejum**. Além disso, procedimentos sob anestesia local (como Core Biopsy e LEEP) não devem ser realizados com a paciente em jejum.
+    </p>
+    <div class="alert-box">
+      <strong>Importância Fisiológica:</strong> O jejum alimentar antes de procedimentos cirúrgicos ambulatoriais eleva de forma acentuada o estresse metabólico, a ansiedade e o risco de **hipoglicemia e síncope/reação vasovagal** (queda súbita de pressão com tontura e perda de consciência). O lanche oferecido pela copa deve ser distribuído como suporte calórico e conforto pós-procedimento, e não para quebrar jejuns inadequados.
+    </div>
+
+    <h3>3.4. Fluxo para Lesões Invisíveis ao USG (BI-RADS 4/5)</h3>
+    <p class="content-paragraph">
+      <strong>Por que foi alterado?</strong> Em exames de rastreamento de câncer de mama, muitas lesões suspeitas (BI-RADS 4 e 5) apresentam-se apenas como microcalcificações agrupadas ou distorções arquiteturais sutis, que são **invisíveis ao exame de ultrassom**.
+    </p>
+    <p class="content-paragraph">
+      <strong>Nova Conduta:</strong> Se a lesão não for correlacionável ao ultrassom, a Core Biopsy guiada por USG (único método intervencionista disponível em tempo real na unidade móvel) não pode ser realizada. A paciente precisa ser referenciada imediatamente para um hospital de referência que realize **Biópsia por Estereotaxia (Mamotomia)** ou **Marcação Pré-Cirúrgica (Agulhamento)** guiada por mamografia, evitando que ela fique sem diagnóstico ou sofra tentativas de punção às cegas.
+    </p>
+
+    <h3>3.5. Transporte Seguro de Material Biológico (ANVISA RDC 20/2014)</h3>
+    <p class="content-paragraph">
+      <strong>Por que foi alterado?</strong> O envio de biópsias para o laboratório central (A.C. Camargo) envolve o transporte de tecidos humanos fixados em Formol 10% (um agente carcinogênico e volátil).
+    </p>
+    <p class="content-paragraph">
+      <strong>Nova Conduta:</strong> O POP agora exige que a enfermagem prepare os frascos de boca larga com tampa hermética de rosca e os acondicione na **embalagem tríplice normatizada para material biológico Categoria B (UN 3373)**. Isso assegura conformidade com as exigências de transporte rodoviário ou aéreo de amostras de patologia.
+    </p>
+
+    <h3>3.6. Proteção de Dados (LGPD) e Plano de Contingência</h3>
+    <p class="content-paragraph">
+      <strong>Por que foi alterado?</strong> Unidades móveis de saúde operam frequentemente em cidades e locais de difícil conectividade (mesmo com Starlink). A parada de sistemas eletrônicos (e-SUS e SISCAN) não pode paralisar os exames das pacientes agendadas.
+    </p>
+    <p class="content-paragraph">
+      <strong>Nova Conduta:</strong> O Técnico de TI e o Cadastro agora contam com o **Protocolo de Contingência Sem Conectividade**, prevendo o preenchimento manual em formulários físicos. Para atender à <strong>LGPD (Lei nº 13.709/2018)</strong>, as folhas físicas devem ser armazenadas em armário trancado e, após a digitação subsequente, destruídas em fragmentadora de papel na própria unidade móvel para evitar vazamentos de dados de saúde sensíveis.
+    </p>
+
+    <!-- 4. CONCLUSÃO -->
+    <h2>4. Conclusão</h2>
+    <p class="content-paragraph">
+      As alterações efetuadas transformaram o Procedimento Operacional Padrão em um documento maduro, seguro e apto a ser apresentado a órgãos fiscalizadores (Vigilância Sanitária, COREN-BA e CRM-BA). Ele assegura que a operação da Unidade Móvel 63 ocorra com o máximo de produtividade e respeito às leis sanitárias e regulamentações clínicas brasileiras vigentes.
+    </p>
+
+    <!-- ASSINATURAS DO RELATÓRIO -->
+    <table class="signatures-table">
+      <tr>
+        <td>
+          Elaborado por a Equipe de Revisão Técnica:
+          <div class="line">
+            <strong>Assessoria Técnica e de TI</strong><br>
+            EcoLink PEP-RIS<br>
+            Data: 01/06/2026
+          </div>
+        </td>
+        <td>
+          Ciente e De Acordo:
+          <div class="line">
+            <strong>Fabiana Leite Souza Teixeira</strong><br>
+            Coordenadora Geral / RT de Enfermagem<br>
+            Data: ____/____/_______
+          </div>
+        </td>
+      </tr>
+    </table>
+
+  </main>
+
+  <!-- Script JS para Conversão e Exportação para Word (.doc) -->
+  <script>
+    function exportToWord() {
+      // Captura o conteúdo do documento
+      var documentHtml = document.getElementById("report-document").innerHTML;
+      
+      // Constrói o cabeçalho XML do Word MSO para interpretar as margens e o papel A4
+      var header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>" +
+                   "<head><title>Relatorio de Alteracoes POP-AMB-001</title>" +
+                   "<!--[if gte mso 9]><xml>" +
+                   "<w:WordDocument>" +
+                   "<w:View>Print</w:View>" +
+                   "<w:Zoom>100</w:Zoom>" +
+                   "<w:DoNotOptimizeForBrowser/>" +
+                   "</w:WordDocument>" +
+                   "</xml><![endif]-->" +
+                   "<style>" +
+                   "@page {" +
+                   "  size: A4;" +
+                   "  margin: 2.0cm 2.0cm 2.0cm 3.0cm;" + /* Top Right Bottom Left */
+                   "}" +
+                   "body {" +
+                   "  font-family: Arial, sans-serif;" +
+                   "  font-size: 11pt;" +
+                   "  line-height: 1.15;" +
+                   "}" +
+                   "table {" +
+                   "  border-collapse: collapse;" +
+                   "  width: 100%;" +
+                   "  margin: 12px 0;" +
+                   "}" +
+                   "table, th, td {" +
+                   "  border: 1px solid #000000;" +
+                   "  padding: 8px;" +
+                   "  font-size: 9.5pt;" +
+                   "}" +
+                   "th {" +
+                   "  background-color: #f2f2f2;" +
+                   "  font-weight: bold;" +
+                   "}" +
+                   ".report-header {" +
+                   "  text-align: center;" +
+                   "  font-weight: bold;" +
+                   "  border-bottom: 2px solid #000000;" +
+                   "  padding-bottom: 8px;" +
+                   "  margin-bottom: 20px;" +
+                   "}" +
+                   ".report-header p {" +
+                   "  margin: 2px 0;" +
+                   "}" +
+                   ".report-title {" +
+                   "  font-size: 13pt;" +
+                   "  font-weight: bold;" +
+                   "  text-align: center;" +
+                   "  margin: 15px 0;" +
+                   "}" +
+                   "h2 {" +
+                   "  font-size: 11pt;" +
+                   "  font-weight: bold;" +
+                   "  margin-top: 18px;" +
+                   "  margin-bottom: 6px;" +
+                   "  border-bottom: 2px solid #000000;" +
+                   "  padding-bottom: 2px;" +
+                   "}" +
+                   "h3 {" +
+                   "  font-size: 10.5pt;" +
+                   "  font-weight: bold;" +
+                   "  margin-top: 12px;" +
+                   "  margin-bottom: 4px;" +
+                   "}" +
+                   "p {" +
+                   "  margin-bottom: 10px;" +
+                   "  text-align: justify;" +
+                   "}" +
+                   ".alert-box {" +
+                   "  border-left: 4px solid #b45309;" +
+                   "  background-color: #fffbeb;" +
+                   "  padding: 10px;" +
+                   "  margin: 12px 0;" +
+                   "  font-size: 9.5pt;" +
+                   "}" +
+                   "ul, ol {" +
+                   "  margin-left: 20px;" +
+                   "}" +
+                   "li {" +
+                   "  margin-bottom: 4px;" +
+                   "}" +
+                   ".signatures-table td {" +
+                   "  font-size: 9pt;" +
+                   "  text-align: center;" +
+                   "  width: 50%;" +
+                   "}" +
+                   ".signatures-table .line {" +
+                   "  margin-top: 30px;" +
+                   "  border-top: 1px solid #000000;" +
+                   "  padding-top: 2px;" +
+                   "}" +
+                   "</style></head><body>";
+                   
+      var footer = "</body></html>";
+      
+      // Conteúdo HTML completo montado
+      var htmlContent = header + documentHtml + footer;
+      
+      // Cria o blob do arquivo para download como msword
+      var blob = new Blob(['\ufeff' + htmlContent], {
+        type: 'application/msword;charset=utf-8'
+      });
+      
+      // Cria o link de download temporário
+      var downloadUrl = URL.createObjectURL(blob);
+      var downloadLink = document.createElement("a");
+      document.body.appendChild(downloadLink);
+      
+      downloadLink.href = downloadUrl;
+      downloadLink.download = "Relatorio_Alteracoes_POP-AMB-001.doc";
+      downloadLink.click();
+      
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(downloadUrl);
+    }
+  </script>
+</body>
+</html>
