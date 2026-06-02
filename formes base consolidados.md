@@ -332,23 +332,23 @@ Número de Biópsia do Colo Uterino:
 
 Número de Exame Anatomo-Patológico do Colo Uterino - Biópsia:
 *
+1
 0
 0
+3
+8
 0
 0
+2
+5
+5
+3
+4
+5
+4
+4
 0
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
-0
+4
 
 
 

@@ -344,23 +344,7 @@ function render(){
     <div class="legend">Solicitar também: filas zeradas (COGEC) · acesso do município aos laudos dentro da carreta · confirmação dos dados oficiais (MS).</div>
   </section>`);
 
-  // 7 - MATRIZ
-  const matriz = [
-    ["Levantamento de pendências (OCI/biópsias)","Apoia","Consolida","Executa busca ativa"],
-    ["Agendamento da telemedicina","Disponibiliza link","Convoca paciente","Acompanha consulta"],
-    ["Acompanhamento BI-RADS 4 e 5","Orienta","Regula vagas","Navegação do Cuidado"],
-    ["Encaminhamento p/ tratamento","—","Garante vaga na rede","Monitora paciente"],
-    ["Rastreabilidade / registro","Define padrão","Registra no sistema","Atualiza prontuário"],
-    ["Acesso a laudos e dados","Repassa acessos","Recebe e distribui","Utiliza no cuidado"]
-  ];
-  slides.push(`<section class="slide">
-    <h2>🧩 Matriz de Responsáveis</h2>
-    <div class="sub">Quem faz o quê na continuidade do cuidado — validar linha a linha</div>
-    <table class="matrix"><thead><tr><th>Ação</th><th>AgSUS</th><th>Regulação Municipal</th><th>APS / Atenção Básica</th></tr></thead>
-    <tbody>${matriz.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("")}</tbody></table>
-  </section>`);
-
-  // 8 - CONTINUIDADE
+  // 7 - CONTINUIDADE
   const passos = [
     "Concluir levantamento nominal de pendências (OCI e biópsias)",
     `Confirmar agendamento da telemedicina para as ${biopsias} biópsias de mama (resultado em até 15 dias)`,
@@ -375,7 +359,7 @@ function render(){
     ${passos.map((p,i)=>`<div class="next"><div class="n">${i+1}</div><div class="t">${p}</div></div>`).join("")}
   </section>`);
 
-  // 9 - ENCERRAMENTO
+  // 8 - ENCERRAMENTO
   slides.push(`<section class="slide end">
     <div class="circle"></div>
     <div class="ty">OBRIGADA!</div>
