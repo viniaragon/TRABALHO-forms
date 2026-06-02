@@ -30,20 +30,21 @@
   @keyframes fade{from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;}}
   /* faixa MS no topo */
   .slide::before{
-    content:""; position:absolute; top:0; left:0; right:0; height:.7vh;
+    content:""; position:absolute; top:0; left:0; right:0; height:.7vh; z-index:3;
     background:linear-gradient(90deg,var(--amarelo) 0 25%,var(--vermelho) 25% 50%,var(--verde) 50% 75%,var(--azul) 75% 100%);
   }
   h1{color:var(--azul); font-size:2.6vw; line-height:1.1; margin-bottom:.4vh;}
   h2{color:var(--azul); font-size:2.3vw; display:flex; align-items:center; gap:.6vw; border-left:.6vw solid var(--azul); padding-left:1vw; margin-bottom:.4vh;}
   .sub{color:#555; font-size:1.15vw; margin:.2vh 0 2.2vh 1.6vw;}
   /* ---------- Capa ---------- */
-  .cover{justify-content:center; position:relative;}
-  .cover .circle{position:absolute; top:-18vh; left:-14vw; width:46vh; height:46vh; border-radius:50%; background:var(--azul); opacity:.95;}
+  .cover{justify-content:center; position:relative;
+    background:#fff url('logo-especialistas.png') center/cover no-repeat;}
+  .cover::after{content:""; position:absolute; inset:0; background:rgba(255,255,255,.80); z-index:1;}
+  .cover .circle{display:none;}
   .cover .kicker{color:var(--verde); font-weight:800; font-size:1.8vw; letter-spacing:.05em; z-index:2;}
   .cover .big{color:var(--azul); font-weight:900; font-size:5vw; line-height:1.05; margin:1vh 0; z-index:2;}
   .cover .line{font-size:1.5vw; color:#444; z-index:2;}
   .cover .meta{margin-top:3vh; font-size:1.1vw; color:#555; z-index:2;}
-  .cover-logo{position:relative; z-index:2; max-width:26vw; max-height:18vh; margin-bottom:1.5vh; object-fit:contain; align-self:flex-start;}
   .badge{display:inline-block; background:var(--azul); color:#fff; padding:.5vh 1.2vw; border-radius:99px; font-size:1vw; font-weight:700; margin-top:2vh;}
   /* ---------- Cards de números ---------- */
   .cards{display:grid; grid-template-columns:repeat(4,1fr); gap:1.4vw; margin-top:1vh;}
@@ -90,8 +91,10 @@
   .next .n{flex:none; width:2.8vw; height:2.8vw; border-radius:8px; background:var(--verde); color:#fff; font-weight:800; font-size:1.3vw; display:flex; align-items:center; justify-content:center;}
   .next .t{font-size:1.25vw; color:#333;}
   /* ---------- Encerramento ---------- */
-  .end{justify-content:center; position:relative;}
-  .end .circle{position:absolute; bottom:-20vh; right:-12vw; width:48vh; height:48vh; border-radius:50%; background:var(--azul);}
+  .end{justify-content:center; position:relative;
+    background:#fff url('logo-especialistas.png') center/cover no-repeat;}
+  .end::after{content:""; position:absolute; inset:0; background:rgba(255,255,255,.80); z-index:1;}
+  .end .circle{display:none;}
   .end .ty{font-size:6vw; font-weight:900; color:var(--azul); z-index:2;}
   .end p{font-size:1.5vw; color:#444; line-height:1.8; z-index:2;}
   .end .ct{margin-top:3vh; font-size:1.4vw; color:var(--azul); font-weight:700; z-index:2;}
@@ -257,7 +260,6 @@ function render(){
   // 1 - CAPA
   slides.push(`<section class="slide cover">
     <div class="circle"></div>
-    <img src="logo-especialistas.png" alt="Agora tem Especialistas" class="cover-logo">
     <div class="kicker">AGORA TEM ESPECIALISTAS</div>
     <div class="big">REUNIÃO DE<br>DESMOBILIZAÇÃO</div>
     <div class="line">Unidade Móvel de Atenção Especializada (UMAE) — Saúde da Mulher</div>
