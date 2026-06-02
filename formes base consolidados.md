@@ -21,6 +21,7 @@ formes base consolidados diaria carreta programa agora tem especialista
 27/05/2026
 28/05/2026
 29/05/2026
+01/06/2026
 
 
 
@@ -43,6 +44,7 @@ Número de pessoas agendadas:
 80
 101
 61
+56
 
 
 
@@ -65,6 +67,7 @@ Número de pessoas atendidas:
 114
 108
 59
+75
 
 
 
@@ -87,6 +90,7 @@ Número de pessoas que faltaram:
 0
 0
 2
+0
 
 
 
@@ -108,6 +112,7 @@ Número de Vagas ofertadas
 70
 140
 140
+70
 70
 
 
@@ -136,6 +141,7 @@ Número de Consultas Médicas:
 245
 215
 100
+129
 
 
 
@@ -158,6 +164,7 @@ Número de USG de Mamária:
 62
 68
 19
+25
 
 
 
@@ -180,6 +187,7 @@ Número de USG Transvaginal:
 100
 84
 39
+42
 
 
 
@@ -200,6 +208,7 @@ Número de USG Pélvica:
 4
 4
 8
+5
 5
 5
 
@@ -224,6 +233,7 @@ Número de Mamografia:
 69
 53
 36
+43
 
 
 
@@ -246,6 +256,7 @@ Número de Punção de Mama por Agulha Grossa:
 0
 0
 11
+6
 
 
 
@@ -268,6 +279,7 @@ Número de Exame Anatomopatológico de Mama - Biópsia:
 0
 0
 0
+06
 
 
 
@@ -290,6 +302,7 @@ Número de Colposcopia:
 24
 39
 0
+28
 
 
 
@@ -312,12 +325,14 @@ Número de Biópsia do Colo Uterino:
 4
 4
 0
+4
 
 
 
 
 Número de Exame Anatomo-Patológico do Colo Uterino - Biópsia:
 *
+0
 0
 0
 0
@@ -356,6 +371,7 @@ Número de OCI fechadas:
 245
 215
 100
+129
 
 
 
@@ -378,3 +394,4 @@ Nome do responsável pelo preenchimento:
 -
 -
 -
+Fabiana Teixeira
