@@ -98,6 +98,16 @@ function showToast(message, type = 'success') {
 
 // Inicializar e Carregar Dados
 async function loadData(selectDateStr = null) {
+    if (window.isStaticExport) {
+        populateDateSelector();
+        if (selectDateStr) {
+            dateModeSelect.value = 'single';
+            singleDateSelect.value = selectDateStr;
+        }
+        updateUIState();
+        applyFilters();
+        return;
+    }
     try {
         const response = await fetch('/api/data');
         const res = await response.json();
@@ -577,6 +587,62 @@ recordForm.addEventListener('submit', async (e) => {
         showToast('Falha na comunicação com o servidor.', 'error');
     }
 });
+
+// Exportação Estática HTML
+const btnExportHTML = document.getElementById('btnExportHTML');
+if (btnExportHTML) {
+    btnExportHTML.addEventListener('click', async () => {
+        try {
+            showToast('Preparando exportação estática...', 'success');
+            
+            // 1. Carregar conteúdo HTML da página (com cache-busting)
+            const htmlRes = await fetch('/index.html?t=' + Date.now());
+            let htmlText = await htmlRes.text();
+            
+            // 2. Carregar folha de estilos CSS (com cache-busting)
+            const cssRes = await fetch('/index.css?t=' + Date.now());
+            const cssText = await cssRes.text();
+            
+            // 3. Carregar o script JS atual (com cache-busting)
+            const jsRes = await fetch('/app.js?t=' + Date.now());
+            let jsText = await jsRes.text();
+            
+            // 4. Injetar os dados do estado atual na variável allData do script (via REGEX robusto)
+            const currentDataStr = JSON.stringify(allData);
+            jsText = jsText.replace(/let\s+allData\s*=\s*\[\s*\]\s*;/, `let allData = ${currentDataStr};`);
+            
+            // 5. Substituir as tags de link e script para versões internas (inline)
+            // Também adicionamos regras CSS para ocultar botões interativos de salvamento e exportação
+            const cssStyles = `<style>\n${cssText}\n#btnOpenModal, #btnExportHTML { display: none !important; }\n</style>`;
+            
+            // Usamos strings divididas para o fechamento de tags script para evitar que o parser de HTML do navegador
+            // encerre o bloco do dashboard prematuramente ao interpretar o código da própria função de exportação.
+            const cssRegex = new RegExp('<link\\s+rel=["\']stylesheet["\']\\s+href=["\']index\\.css["\']\\s*/?>', 'i');
+            htmlText = htmlText.replace(cssRegex, cssStyles);
+            
+            const jsScript = '<script>\nwindow.isStaticExport = true;\n' + jsText + '\n<' + '/script>';
+            const jsRegex = new RegExp('<script\\s+src=["\']app\\.js["\']\\s*><\\/' + 'script>', 'i');
+            htmlText = htmlText.replace(jsRegex, jsScript);
+            
+            // 6. Gerar blob e forçar download do arquivo HTML
+            const blob = new Blob([htmlText], { type: 'text/html;charset=utf-8' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            const tempLink = document.createElement('a');
+            tempLink.href = blobUrl;
+            tempLink.download = `relatorio_carreta_saude_${new Date().toISOString().split('T')[0]}.html`;
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
+            URL.revokeObjectURL(blobUrl);
+            
+            showToast('Relatório baixado com sucesso!');
+        } catch (error) {
+            console.error(error);
+            showToast('Erro ao exportar HTML.', 'error');
+        }
+    });
+}
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {

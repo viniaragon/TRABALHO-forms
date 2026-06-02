@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const FILE_PATH = path.join(__dirname, 'formes base consolidados.md');
+const FILE_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'formes base consolidados.md');
 
 // Estrutura de campos mapeada exatamente na ordem em que aparecem no Markdown
 const FIELDS = [
