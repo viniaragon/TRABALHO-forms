@@ -1,0 +1,4 @@
+Firebase inicializado usando arquivo local de credenciais (firebase-credentials.json).
+Conectado ao banco Firestore: "default".
+Servidor rodando na porta 3100
+Firestore jÃ¡ contÃ©m dados. MigraÃ§Ã£o automÃ¡tica ignorada.

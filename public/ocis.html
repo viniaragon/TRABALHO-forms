@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de OCIs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="ocis.css">
+</head>
+<body>
+    <div class="oci-shell">
+        <header class="oci-header">
+            <div class="brand-block">
+                <img src="logo-especialistas.png" alt="Agora tem Especialistas" class="brand-logo">
+                <div>
+                    <h1>Controle de OCIs</h1>
+                    <p>Consulta operacional do banco local PostgreSQL</p>
+                </div>
+            </div>
+            <nav class="header-actions">
+                <a href="index.html" class="btn secondary"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+                <a href="desmobilizacao.html" class="btn secondary"><i class="fa-solid fa-people-group"></i> Desmobilização</a>
+                <button id="btnExportExternal" class="btn primary"><i class="fa-solid fa-file-excel"></i> Exportar sem valores</button>
+                <button id="btnExportInternal" class="btn danger"><i class="fa-solid fa-lock"></i> Exportar interno</button>
+            </nav>
+        </header>
+
+        <section class="toolbar">
+            <div class="field">
+                <label for="filterRegiao">Região</label>
+                <select id="filterRegiao">
+                    <option value="">Todas</option>
+                    <option value="IRECE">IRECÊ</option>
+                    <option value="JACOBINA">JACOBINA</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="filterCompetencia">Competência</label>
+                <select id="filterCompetencia">
+                    <option value="">Todas</option>
+                    <option value="MARCO">MARÇO</option>
+                    <option value="ABRIL">ABRIL</option>
+                    <option value="MAIO">MAIO</option>
+                    <option value="JUNHO">JUNHO</option>
+                </select>
+            </div>
+            <div class="field search-field">
+                <label for="filterSearch">Busca</label>
+                <div class="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="filterSearch" type="search" placeholder="Paciente, município, código ou OCI">
+                </div>
+            </div>
+            <label class="toggle">
+                <input id="toggleInternal" type="checkbox">
+                <span></span>
+                <strong>Modo interno</strong>
+            </label>
+            <span id="accessBadge" class="access-badge">Externo</span>
+        </section>
+
+        <main>
+            <section class="kpi-grid">
+                <article class="kpi-card accent-blue">
+                    <span class="kpi-label">Pacientes atendidos</span>
+                    <strong id="kpiPacientesAtendidos">0</strong>
+                    <small>Registros únicos no filtro</small>
+                </article>
+                <article class="kpi-card accent-green">
+                    <span class="kpi-label">Pacientes com OCI</span>
+                    <strong id="kpiPacientesComOci">0</strong>
+                    <small>Com pelo menos uma OCI fechada</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span class="kpi-label">OCIs consolidadas</span>
+                    <strong id="kpiTotalOcis">0</strong>
+                    <small>Paciente + OCI conta uma vez</small>
+                </article>
+                <article class="kpi-card accent-blue">
+                    <span class="kpi-label">Consultas minimas</span>
+                    <strong id="kpiConsultasMinimas">0</strong>
+                    <small>1 por paciente com OCI</small>
+                </article>
+                <article class="kpi-card accent-green">
+                    <span class="kpi-label">Consultas equivalentes por OCI</span>
+                    <strong id="kpiConsultasEquivalentes">0</strong>
+                    <small>1 validação clínica por OCI</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span class="kpi-label">Procedimentos sem consulta</span>
+                    <strong id="kpiProcedimentosSemConsulta">0</strong>
+                    <small>Procedimentos vinculados às OCIs</small>
+                </article>
+                <article class="kpi-card accent-blue">
+                    <span class="kpi-label">Consultas especializadas</span>
+                    <strong id="kpiConsultasEspecialistas">0</strong>
+                    <small>Consulta/teleconsulta por OCI</small>
+                </article>
+                <article class="kpi-card accent-slate">
+                    <span class="kpi-label">Total geral</span>
+                    <strong id="kpiTotalProcedimentosConsultas">0</strong>
+                    <small>Procedimentos + consultas</small>
+                </article>
+                <article class="kpi-card accent-red">
+                    <span class="kpi-label">Pendências sem OCI</span>
+                    <strong id="kpiPendencias">0</strong>
+                    <small>Linhas para revisão operacional</small>
+                </article>
+                <article id="valueCard" class="kpi-card accent-slate hidden">
+                    <span class="kpi-label">Valor interno</span>
+                    <strong id="kpiValorTotal">R$ 0,00</strong>
+                    <small>SIGTAP, uso interno</small>
+                </article>
+            </section>
+
+            <section class="content-grid">
+                <article class="panel oci-summary-panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2><i class="fa-solid fa-layer-group"></i> Resumo por OCI</h2>
+                            <p>Quantitativo consolidado por código OCI.</p>
+                        </div>
+                        <span id="summaryStatus" class="status-pill">Atualizando</span>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr id="summaryHead"></tr>
+                            </thead>
+                            <tbody id="summaryBody"></tbody>
+                        </table>
+                    </div>
+                </article>
+
+                <article id="pendingPanel" class="panel pending-panel hidden">
+                    <div class="panel-head">
+                        <div>
+                            <h2><i class="fa-solid fa-triangle-exclamation"></i> Pendências</h2>
+                            <p>Visível apenas com senha master.</p>
+                        </div>
+                    </div>
+                    <div id="pendingList" class="pending-list"></div>
+                </article>
+            </section>
+
+            <section class="panel procedures-panel">
+                <div class="panel-head">
+                    <div>
+                        <h2><i class="fa-solid fa-stethoscope"></i> Procedimentos realizados</h2>
+                        <p>Procedimentos derivados das siglas e observacoes registradas.</p>
+                    </div>
+                    <span id="proceduresCount" class="status-pill muted">0 procedimentos</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr id="proceduresHead"></tr>
+                        </thead>
+                        <tbody id="proceduresBody"></tbody>
+                    </table>
+                </div>
+                <p class="method-note">Procedimentos são derivados das siglas registradas. Procedimentos sem consulta excluem a validação clínica; consultas especializadas contam 1 consulta/teleconsulta por OCI fechada; total geral soma os dois grupos.</p>
+            </section>
+
+            <section class="panel nominal-panel">
+                <div class="panel-head">
+                    <div>
+                        <h2><i class="fa-solid fa-table-list"></i> Nominal para conferência</h2>
+                        <p>Nome completo aparece apenas neste ambiente local.</p>
+                    </div>
+                    <span id="nominalCount" class="status-pill muted">0 pacientes</span>
+                </div>
+                <div class="table-wrap large">
+                    <table>
+                        <thead>
+                            <tr id="nominalHead"></tr>
+                        </thead>
+                        <tbody id="nominalBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="ocis.js"></script>
+</body>
+</html>
+
