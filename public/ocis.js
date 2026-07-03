@@ -19,6 +19,13 @@ const kpiTotalProcedimentosConsultas = document.getElementById('kpiTotalProcedim
 const kpiValorTotal = document.getElementById('kpiValorTotal');
 const valueCard = document.getElementById('valueCard');
 
+const kpiLaudosPacientesTotais = document.getElementById('kpiLaudosPacientesTotais');
+const kpiLaudosMamografia = document.getElementById('kpiLaudosMamografia');
+const kpiLaudosUsg = document.getElementById('kpiLaudosUsg');
+const kpiLaudosUsgTransvaginal = document.getElementById('kpiLaudosUsgTransvaginal');
+const kpiLaudosUsgMama = document.getElementById('kpiLaudosUsgMama');
+const kpiLaudosUsgPelvica = document.getElementById('kpiLaudosUsgPelvica');
+
 const summaryHead = document.getElementById('summaryHead');
 const summaryBody = document.getElementById('summaryBody');
 const summaryStatus = document.getElementById('summaryStatus');
@@ -136,6 +143,14 @@ function renderSummary(summary) {
     kpiTotalProcedimentosConsultas.textContent = formatNumber(kpis.totalProcedimentosEConsultas);
     kpiPendencias.textContent = accessLevel === 'master' ? formatNumber(kpis.pendenciasSemOci) : '***';
     kpiValorTotal.textContent = formatMoney(kpis.valorTotal);
+
+    const laudos = summary.laudos || {};
+    kpiLaudosPacientesTotais.textContent = formatNumber(laudos.pacientesTotais);
+    kpiLaudosMamografia.textContent = formatNumber(laudos.comLaudoMamografia);
+    kpiLaudosUsg.textContent = formatNumber(laudos.comLaudoUsg);
+    kpiLaudosUsgTransvaginal.textContent = formatNumber(laudos.comLaudoUsgTransvaginal);
+    kpiLaudosUsgMama.textContent = formatNumber(laudos.comLaudoUsgMama);
+    kpiLaudosUsgPelvica.textContent = formatNumber(laudos.comLaudoUsgPelvica);
 
     const headers = ['Codigo OCI', 'OCI', 'Qtd'];
     if (internal) headers.push('Valor interno');
