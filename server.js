@@ -1609,15 +1609,16 @@ app.get('/api/pacientes-banco/laudos/:id/pdf', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Laudo nao encontrado neste perfil de acesso.' });
         }
 
+        // O arquivo local só é servido se o caminho for válido nesta máquina;
+        // caso contrário (deploy na nuvem, caminho Windows, arquivo ausente)
+        // cai no fallback do Firebase Storage com URL assinada temporária.
         const storageRoot = path.resolve(__dirname, 'storage');
         const filePath = path.resolve(document.caminho_armazenado);
-        if (!isInsideDirectory(storageRoot, filePath) || path.extname(filePath).toLowerCase() !== '.pdf') {
-            return res.status(403).json({ success: false, message: 'Caminho de arquivo nao permitido.' });
-        }
+        const localOk = isInsideDirectory(storageRoot, filePath)
+            && path.extname(filePath).toLowerCase() === '.pdf'
+            && fs.existsSync(filePath);
 
-        if (!fs.existsSync(filePath)) {
-            // Fallback: cópia na nuvem (Firebase Storage, bucket privado) via
-            // URL assinada temporária — só laudos vinculados são enviados.
+        if (!localOk) {
             const stored = await ociPool.query(
                 'SELECT storage_path FROM oci.laudos_pacientes WHERE id = $1::bigint',
                 [laudoId]
@@ -1631,7 +1632,7 @@ app.get('/api/pacientes-banco/laudos/:id/pdf', async (req, res) => {
                 });
                 return res.redirect(signedUrl);
             }
-            return res.status(404).json({ success: false, message: 'Arquivo PDF nao encontrado no storage local.' });
+            return res.status(404).json({ success: false, message: 'Arquivo PDF nao disponivel (local ou nuvem).' });
         }
 
         res.sendFile(filePath, {
