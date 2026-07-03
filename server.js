@@ -68,12 +68,14 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Ordem de preferência: OCI_DB_* (explícito) -> POSTGRES_* (injetado pelo
+// Zeabur quando há um serviço PostgreSQL no mesmo projeto) -> local (Docker).
 const ociPool = new Pool({
-    host: process.env.OCI_DB_HOST || '127.0.0.1',
-    port: Number(process.env.OCI_DB_PORT || 55432),
-    database: process.env.OCI_DB_NAME || 'ocis_local',
-    user: process.env.OCI_DB_USER || 'oci_admin',
-    password: process.env.OCI_DB_PASSWORD || 'oci_admin_local',
+    host: process.env.OCI_DB_HOST || process.env.POSTGRES_HOST || '127.0.0.1',
+    port: Number(process.env.OCI_DB_PORT || process.env.POSTGRES_PORT || 55432),
+    database: process.env.OCI_DB_NAME || process.env.POSTGRES_DATABASE || 'ocis_local',
+    user: process.env.OCI_DB_USER || process.env.POSTGRES_USERNAME || 'oci_admin',
+    password: process.env.OCI_DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'oci_admin_local',
 });
 
 const OCI_CODES_ORDER = [
@@ -1614,6 +1616,21 @@ app.get('/api/pacientes-banco/laudos/:id/pdf', async (req, res) => {
         }
 
         if (!fs.existsSync(filePath)) {
+            // Fallback: cópia na nuvem (Firebase Storage, bucket privado) via
+            // URL assinada temporária — só laudos vinculados são enviados.
+            const stored = await ociPool.query(
+                'SELECT storage_path FROM oci.laudos_pacientes WHERE id = $1::bigint',
+                [laudoId]
+            );
+            const storagePath = stored.rows[0]?.storage_path;
+            if (storagePath && isFirebaseConfigured && admin) {
+                const bucketName = process.env.FIREBASE_STORAGE_BUCKET || 'vortexaiecolink.firebasestorage.app';
+                const [signedUrl] = await admin.storage().bucket(bucketName).file(storagePath).getSignedUrl({
+                    action: 'read',
+                    expires: Date.now() + 15 * 60 * 1000,
+                });
+                return res.redirect(signedUrl);
+            }
             return res.status(404).json({ success: false, message: 'Arquivo PDF nao encontrado no storage local.' });
         }
 
