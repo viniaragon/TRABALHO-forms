@@ -22,6 +22,7 @@
             </div>
             <nav class="header-actions">
                 <a href="index.html" class="btn secondary"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+                <a href="pacientes.html" class="btn secondary"><i class="fa-solid fa-hospital-user"></i> Banco de Pacientes</a>
                 <a href="desmobilizacao.html" class="btn secondary"><i class="fa-solid fa-people-group"></i> Desmobilização</a>
                 <button id="btnExportExternal" class="btn primary"><i class="fa-solid fa-file-excel"></i> Exportar sem valores</button>
                 <button id="btnExportInternal" class="btn danger"><i class="fa-solid fa-lock"></i> Exportar interno</button>
@@ -113,6 +114,39 @@
                     <span class="kpi-label">Valor interno</span>
                     <strong id="kpiValorTotal">R$ 0,00</strong>
                     <small>SIGTAP, uso interno</small>
+                </article>
+            </section>
+
+            <section class="kpi-grid" aria-label="Laudos vinculados">
+                <article class="kpi-card accent-slate">
+                    <span class="kpi-label">Pacientes totais</span>
+                    <strong id="kpiLaudosPacientesTotais">0</strong>
+                    <small>Pacientes únicos no filtro</small>
+                </article>
+                <article class="kpi-card accent-blue">
+                    <span class="kpi-label">Com laudo de Mamografia</span>
+                    <strong id="kpiLaudosMamografia">0</strong>
+                    <small>Laudo vinculado ao paciente</small>
+                </article>
+                <article class="kpi-card accent-green">
+                    <span class="kpi-label">Com laudo de USG</span>
+                    <strong id="kpiLaudosUsg">0</strong>
+                    <small>Qualquer tipo de ultrassonografia</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span class="kpi-label">USG Transvaginal</span>
+                    <strong id="kpiLaudosUsgTransvaginal">0</strong>
+                    <small>Inclui laudos combinados TV/pélvica</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span class="kpi-label">USG de Mama</span>
+                    <strong id="kpiLaudosUsgMama">0</strong>
+                    <small>Normal ou complementação mamográfica</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span class="kpi-label">USG Pélvica</span>
+                    <strong id="kpiLaudosUsgPelvica">0</strong>
+                    <small>Inclui laudos combinados TV/pélvica</small>
                 </article>
             </section>
 

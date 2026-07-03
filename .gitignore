@@ -19,6 +19,8 @@ Thumbs.db
 .env.test.local
 .env.production.local
 firebase-credentials.json
+storage/
+backups/
 
 # IDEs and editors
 .idea/
@@ -28,3 +30,7 @@ firebase-credentials.json
 *.njsproj
 *.sln
 *.sw?
+
+# Relatórios com dados de pacientes e logs locais
+reports/
+*.log

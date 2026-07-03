@@ -69,8 +69,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const ociPool = new Pool({
-    host: process.env.OCI_DB_HOST || 'localhost',
-    port: Number(process.env.OCI_DB_PORT || 5432),
+    host: process.env.OCI_DB_HOST || '127.0.0.1',
+    port: Number(process.env.OCI_DB_PORT || 55432),
     database: process.env.OCI_DB_NAME || 'ocis_local',
     user: process.env.OCI_DB_USER || 'oci_admin',
     password: process.env.OCI_DB_PASSWORD || 'oci_admin_local',
@@ -94,6 +94,44 @@ function brMoney(value) {
 const SPECIALIST_CONSULT_LABEL = 'Consulta Medica em Atencao Especializada / Teleconsulta Medica em Atencao Especializada';
 const INTERNAL_PASSWORD = process.env.OCI_INTERNAL_PASSWORD || '123456789';
 const MASTER_PASSWORD = process.env.OCI_MASTER_PASSWORD || '987654321';
+const UNLINK_PASSWORD = process.env.OCI_UNLINK_PASSWORD || '010791';
+const PATIENT_BANK_MASTER_PASSWORD = process.env.PATIENT_BANK_MASTER_PASSWORD || MASTER_PASSWORD;
+
+function normalizeAccessText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+}
+
+function parsePatientBankProfiles() {
+    if (!process.env.PATIENT_BANK_ACCESS_PROFILES) {
+        return [];
+    }
+    try {
+        const parsed = JSON.parse(process.env.PATIENT_BANK_ACCESS_PROFILES);
+        if (!Array.isArray(parsed)) {
+            throw new Error('PATIENT_BANK_ACCESS_PROFILES precisa ser um array JSON.');
+        }
+        return parsed
+            .map(profile => ({
+                key: String(profile.key || '').trim(),
+                label: String(profile.label || 'Perfil local').trim(),
+                localidades: Array.isArray(profile.localidades)
+                    ? profile.localidades.map(normalizeAccessText).filter(Boolean)
+                    : null,
+                dateFrom: profile.dateFrom || profile.dataInicio || null,
+                dateTo: profile.dateTo || profile.dataFim || null,
+            }))
+            .filter(profile => profile.key);
+    } catch (error) {
+        console.warn('PATIENT_BANK_ACCESS_PROFILES invalido. Usando apenas senha master.', error.message);
+        return [];
+    }
+}
+
+const PATIENT_BANK_ACCESS_PROFILES = parsePatientBankProfiles();
 
 function parseOciFilters(req) {
     const regiao = String(req.query.regiao || '').trim().toUpperCase();
@@ -109,6 +147,731 @@ function parseOciFilters(req) {
         includeValues: isInternal,
         canViewPending: isMaster,
     };
+}
+
+function resolvePatientBankAccess(req) {
+    const accessKey = String(req.query.accessKey || '').trim();
+    if (accessKey && accessKey === PATIENT_BANK_MASTER_PASSWORD) {
+        return {
+            level: 'master',
+            label: 'Acesso master',
+            localidades: null,
+            dateFrom: null,
+            dateTo: null,
+        };
+    }
+    const profile = PATIENT_BANK_ACCESS_PROFILES.find(item => item.key === accessKey);
+    if (!profile) {
+        return null;
+    }
+    return {
+        level: 'restricted',
+        label: profile.label,
+        localidades: profile.localidades,
+        dateFrom: profile.dateFrom,
+        dateTo: profile.dateTo,
+    };
+}
+
+function patientBankBaseSql() {
+    return `
+        WITH base_laudos AS (
+            SELECT
+                lp.id,
+                lp.paciente_id,
+                COALESCE(p.nome_preferido, lp.nome_extraido) AS paciente,
+                lp.nome_extraido,
+                lp.nome_normalizado,
+                lp.cartao_sus,
+                lp.telefone,
+                lp.municipio_paciente,
+                lp.tipo_laudo,
+                lp.numero_exame,
+                lp.data_solicitacao,
+                lp.data_realizacao,
+                COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date) AS data_laudo,
+                lp.arquivo_original,
+                lp.caminho_origem,
+                lp.caminho_armazenado,
+                lp.chave_logica,
+                lp.duplicado_de_id,
+                lp.status_vinculo,
+                lp.confianca_vinculo,
+                lp.erro_extracao,
+                lp.criado_em,
+                lp.procedimento_raw,
+                lp.data_nascimento,
+                lp.idade_texto,
+                lp.idade_anos,
+                lp.origem_importacao,
+                lp.vinculo_motivo,
+                COALESCE(lp.registro_ativo, true) AS registro_ativo,
+                CASE
+                    WHEN COALESCE(p.data_nascimento, lp.data_nascimento) IS NOT NULL
+                        THEN DATE_PART('year', AGE(CURRENT_DATE, COALESCE(p.data_nascimento, lp.data_nascimento)))::int
+                    ELSE lp.idade_anos
+                END AS idade_calc,
+                CASE
+                    WHEN NULLIF(BTRIM(lp.municipio_paciente), '') IS NOT NULL
+                        AND LENGTH(BTRIM(lp.municipio_paciente)) <= 80
+                        AND lp.municipio_paciente !~* '(RESULTADO|PRONT|POWERED|MAMOGRAFIA| ID:| TIPO:)' THEN
+                        UPPER(TRANSLATE(BTRIM(lp.municipio_paciente), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
+                    WHEN lp.caminho_origem ILIKE '%Irece%' OR lp.caminho_origem ILIKE '%Irecê%' THEN 'IRECE'
+                    WHEN lp.caminho_origem ILIKE '%Jacobina%' THEN 'JACOBINA'
+                    WHEN lp.caminho_origem ILIKE '%Valen%' THEN 'VALENCA'
+                    ELSE 'NAO INFORMADA'
+                END AS localidade,
+                CASE
+                    WHEN COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date)
+                        BETWEEN DATE '2026-03-27' AND DATE '2026-04-30' THEN 'IRECE'
+                    WHEN COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date)
+                        BETWEEN DATE '2026-05-08' AND DATE '2026-06-05' THEN 'JACOBINA'
+                    WHEN COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date)
+                        > DATE '2026-06-05' THEN 'EM ESPERA'
+                    ELSE 'FORA DO PERIODO'
+                END AS regiao_mae,
+                CASE
+                    WHEN lp.paciente_id IS NOT NULL THEN 'P:' || lp.paciente_id::text
+                    ELSE 'L:' || lp.nome_normalizado || ':' || COALESCE(lp.data_nascimento::text, lp.idade_anos::text, 'SEMIDADE')
+                END AS grupo_paciente
+            FROM oci.laudos_pacientes lp
+            LEFT JOIN oci.pacientes p ON p.id = lp.paciente_id
+        ),
+        -- Pacientes da planilha SEM NENHUM laudo vinculado entram como linhas
+        -- virtuais (origem_importacao = 'SEM_LAUDO'; 1 linha por atendimento,
+        -- para os filtros de data/localidade funcionarem). Só aparecem quando
+        -- o interruptor "sem laudo" está ligado.
+        base_sem_laudo AS (
+            SELECT
+                NULL::bigint AS id,
+                p.id AS paciente_id,
+                p.nome_preferido AS paciente,
+                '' AS nome_extraido,
+                p.patient_key AS nome_normalizado,
+                p.cns AS cartao_sus,
+                NULL::text AS telefone,
+                m.nome AS municipio_paciente,
+                NULL::text AS tipo_laudo,
+                NULL::text AS numero_exame,
+                NULL::date AS data_solicitacao,
+                NULL::date AS data_realizacao,
+                a.data_atendimento AS data_laudo,
+                NULL::text AS arquivo_original,
+                NULL::text AS caminho_origem,
+                NULL::text AS caminho_armazenado,
+                NULL::text AS chave_logica,
+                NULL::bigint AS duplicado_de_id,
+                'sem_laudo' AS status_vinculo,
+                NULL::numeric AS confianca_vinculo,
+                NULL::text AS erro_extracao,
+                a.criado_em,
+                NULL::text AS procedimento_raw,
+                p.data_nascimento,
+                NULL::text AS idade_texto,
+                NULL::integer AS idade_anos,
+                'SEM_LAUDO' AS origem_importacao,
+                NULL::text AS vinculo_motivo,
+                true AS registro_ativo,
+                CASE
+                    WHEN p.data_nascimento IS NOT NULL
+                        THEN DATE_PART('year', AGE(CURRENT_DATE, p.data_nascimento))::int
+                END AS idade_calc,
+                m.nome AS localidade,
+                a.regiao AS regiao_mae,
+                'P:' || p.id::text AS grupo_paciente
+            FROM oci.pacientes p
+            JOIN oci.atendimentos a ON a.paciente_id = p.id
+            JOIN oci.municipios m ON m.id = a.municipio_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM oci.laudos_pacientes l
+                WHERE l.paciente_id = p.id
+                  AND COALESCE(l.registro_ativo, true)
+                  AND l.status_vinculo <> 'descartado'
+            )
+        ),
+        base AS (
+            SELECT * FROM base_laudos
+            UNION ALL
+            SELECT * FROM base_sem_laudo
+        )
+    `;
+}
+
+function buildPatientBankWhere(req, access, startIndex = 1) {
+    const clauses = [];
+    const values = [];
+    let idx = startIndex;
+
+    // descartados pela administração e cópias duplicadas (registro_ativo=false)
+    // saem de todas as listagens e contagens do banco
+    clauses.push(`status_vinculo <> 'descartado'`);
+    clauses.push('registro_ativo');
+
+    if (Array.isArray(access.localidades) && access.localidades.length) {
+        clauses.push(`localidade = ANY($${idx++}::text[])`);
+        values.push(access.localidades);
+    }
+
+    const requestedLocalidade = normalizeAccessText(req.query.localidade || '');
+    if (requestedLocalidade && requestedLocalidade !== 'TODAS') {
+        clauses.push(`localidade = $${idx++}`);
+        values.push(requestedLocalidade);
+    }
+
+    const requestedRegiaoMae = normalizeAccessText(req.query.regiaoMae || '');
+    if (requestedRegiaoMae && requestedRegiaoMae !== 'TODAS') {
+        clauses.push(`regiao_mae = $${idx++}`);
+        values.push(requestedRegiaoMae);
+    }
+
+    const requestedFrom = String(req.query.dateFrom || '').trim();
+    const requestedTo = String(req.query.dateTo || '').trim();
+    const effectiveFrom = [requestedFrom, access.dateFrom].filter(Boolean).sort().pop();
+    const effectiveTo = [requestedTo, access.dateTo].filter(Boolean).sort()[0];
+
+    if (effectiveFrom) {
+        clauses.push(`data_laudo >= $${idx++}::date`);
+        values.push(effectiveFrom);
+    }
+
+    if (effectiveTo) {
+        clauses.push(`data_laudo <= $${idx++}::date`);
+        values.push(effectiveTo);
+    }
+
+    const tipo = String(req.query.tipo || '').trim().toUpperCase();
+    const laudoModo = String(req.query.laudoModo || 'com').trim().toLowerCase();
+    if (tipo && tipo !== 'TODOS') {
+        if (laudoModo === 'sem') {
+            // pacientes (grupos) que NÃO têm nenhum laudo desse tipo; inclui os
+            // pacientes sem laudo algum (linhas virtuais SEM_LAUDO)
+            clauses.push(`grupo_paciente NOT IN (
+                SELECT b2.grupo_paciente FROM base b2
+                WHERE b2.tipo_laudo = $${idx} AND b2.status_vinculo <> 'descartado'
+            )`);
+            values.push(tipo);
+            idx++;
+        } else {
+            clauses.push(`tipo_laudo = $${idx++}`);
+            values.push(tipo);
+        }
+    } else if (laudoModo === 'sem') {
+        // "sem laudo" com tipo "Todos": pacientes sem NENHUM laudo
+        clauses.push(`origem_importacao = 'SEM_LAUDO'`);
+    }
+    if (laudoModo !== 'sem') {
+        // no modo normal as linhas virtuais de pacientes sem laudo ficam ocultas
+        clauses.push(`origem_importacao IS DISTINCT FROM 'SEM_LAUDO'`);
+    }
+
+    const status = String(req.query.status || '').trim().toLowerCase();
+    if (status === 'vinculado') {
+        clauses.push('paciente_id IS NOT NULL');
+    } else if (status === 'orfao') {
+        // todo laudo sem paciente (fila de revisão + não encontrados + ignorados)
+        clauses.push(`paciente_id IS NULL AND status_vinculo <> 'quarentena'`);
+    } else if (status === 'pendente') {
+        clauses.push(`status_vinculo IN ('pendente', 'pendente_revisao')`);
+    } else if (status === 'revisado') {
+        clauses.push(`status_vinculo IN ('revisado_manual', 'nao_encontrado', 'ignorado_revisao')`);
+    }
+
+    const faixaIdade = String(req.query.faixaIdade || '').trim().toLowerCase();
+    if (faixaIdade === '40mais') {
+        clauses.push('idade_calc >= 40');
+    } else if (faixaIdade === 'menor40') {
+        clauses.push('idade_calc < 40');
+    } else if (faixaIdade === 'desconhecida') {
+        clauses.push('idade_calc IS NULL');
+    }
+
+    const search = String(req.query.search || '').trim();
+    if (search) {
+        clauses.push(`(
+            paciente ILIKE $${idx}
+            OR nome_extraido ILIKE $${idx}
+            OR cartao_sus ILIKE $${idx}
+            OR telefone ILIKE $${idx}
+            OR tipo_laudo ILIKE $${idx}
+            OR procedimento_raw ILIKE $${idx}
+        )`);
+        values.push(`%${search}%`);
+        idx++;
+    }
+
+    return {
+        whereSql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+        values,
+        effectiveFrom,
+        effectiveTo,
+    };
+}
+
+async function queryPatientBank(req, access) {
+    const { whereSql, values, effectiveFrom, effectiveTo } = buildPatientBankWhere(req, access);
+    const baseSql = patientBankBaseSql();
+    // As opções dos dropdowns vêm de "base" (universo completo permitido), e não
+    // de "filtered": senão o valor selecionado some do próprio filtro.
+    const optionsAccessSql = Array.isArray(access.localidades) && access.localidades.length
+        ? `AND localidade = ANY($1::text[])`
+        : '';
+    const summarySql = `
+        ${baseSql},
+        filtered AS (
+            SELECT * FROM base
+            ${whereSql}
+        ),
+        grouped AS (
+            SELECT
+                grupo_paciente,
+                COUNT(*)::int AS total_laudos,
+                BOOL_OR(paciente_id IS NOT NULL) AS tem_vinculo,
+                BOOL_OR(paciente_id IS NULL) AS tem_pendente
+            FROM filtered
+            GROUP BY grupo_paciente
+        )
+        SELECT
+            (SELECT COUNT(*)::int FROM grouped) AS total_pacientes,
+            (SELECT COUNT(*)::int FROM filtered WHERE origem_importacao IS DISTINCT FROM 'SEM_LAUDO') AS total_laudos,
+            (SELECT COUNT(*)::int FROM filtered WHERE paciente_id IS NOT NULL AND origem_importacao IS DISTINCT FROM 'SEM_LAUDO') AS pacientes_vinculados,
+            (SELECT COUNT(*)::int FROM filtered WHERE paciente_id IS NULL AND status_vinculo <> 'quarentena') AS pacientes_pendentes,
+            (SELECT COUNT(*)::int FROM filtered WHERE tipo_laudo = 'MAMOGRAFIA') AS mamografias,
+            (SELECT COUNT(*)::int FROM filtered WHERE tipo_laudo LIKE 'USG_%') AS usgs,
+            (SELECT COUNT(DISTINCT grupo_paciente)::int FROM filtered WHERE tipo_laudo = 'MAMOGRAFIA') AS pac_com_mamografia,
+            (SELECT COUNT(DISTINCT grupo_paciente)::int FROM filtered WHERE tipo_laudo LIKE 'USG_%') AS pac_com_usg,
+            (SELECT COUNT(DISTINCT grupo_paciente)::int FROM filtered WHERE tipo_laudo IN ('USG_TRANSVAGINAL', 'USG_TRANSVAGINAL_PELVICA')) AS pac_com_usg_tv,
+            (SELECT COUNT(DISTINCT grupo_paciente)::int FROM filtered WHERE tipo_laudo IN ('USG_MAMA', 'USG_MAMA_COMPLEMENTACAO')) AS pac_com_usg_mama,
+            (SELECT COUNT(DISTINCT grupo_paciente)::int FROM filtered WHERE tipo_laudo IN ('USG_PELVICA', 'USG_TRANSVAGINAL_PELVICA')) AS pac_com_usg_pelvica,
+            (SELECT COUNT(*)::int FROM base
+              WHERE (registro_ativo IS FALSE OR duplicado_de_id IS NOT NULL)
+                AND status_vinculo <> 'descartado' ${optionsAccessSql}) AS duplicados_logicos,
+            COALESCE((
+                SELECT json_agg(row_to_json(t) ORDER BY t.qtd DESC, t.tipo_laudo)
+                FROM (
+                    SELECT tipo_laudo, COUNT(*)::int AS qtd
+                    FROM filtered
+                    WHERE tipo_laudo IS NOT NULL
+                    GROUP BY tipo_laudo
+                ) t
+            ), '[]'::json) AS por_tipo,
+            COALESCE((
+                SELECT json_agg(row_to_json(l) ORDER BY l.qtd DESC, l.localidade)
+                FROM (
+                    SELECT localidade, COUNT(*)::int AS qtd
+                    FROM filtered
+                    GROUP BY localidade
+                ) l
+            ), '[]'::json) AS por_localidade,
+            COALESCE((
+                SELECT json_agg(row_to_json(r) ORDER BY r.regiao_mae)
+                FROM (
+                    SELECT regiao_mae, COUNT(*)::int AS qtd
+                    FROM filtered
+                    GROUP BY regiao_mae
+                ) r
+            ), '[]'::json) AS por_regiao_mae,
+            COALESCE((
+                SELECT json_agg(row_to_json(r) ORDER BY r.regiao_mae)
+                FROM (
+                    SELECT regiao_mae, MIN(data_laudo) AS min_data, MAX(data_laudo) AS max_data
+                    FROM base
+                    WHERE status_vinculo <> 'descartado' ${optionsAccessSql}
+                    GROUP BY regiao_mae
+                ) r
+            ), '[]'::json) AS options_regioes_mae,
+            COALESCE((
+                SELECT json_agg(row_to_json(o) ORDER BY o.localidade)
+                FROM (
+                    SELECT localidade, MIN(data_laudo) AS min_data, MAX(data_laudo) AS max_data
+                    FROM base
+                    WHERE status_vinculo <> 'descartado' ${optionsAccessSql}
+                    GROUP BY localidade
+                ) o
+            ), '[]'::json) AS options_localidades,
+            COALESCE((
+                SELECT json_agg(DISTINCT tipo_laudo ORDER BY tipo_laudo)
+                FROM base
+                WHERE status_vinculo <> 'descartado' ${optionsAccessSql}
+                  AND tipo_laudo IS NOT NULL
+            ), '[]'::json) AS options_tipos;
+    `;
+    const summaryValues = Array.isArray(access.localidades) && access.localidades.length
+        ? [access.localidades, ...values.slice(1)]
+        : values;
+    const rowsSql = `
+        ${baseSql},
+        filtered AS (
+            SELECT * FROM base
+            ${whereSql}
+        ),
+        grouped AS (
+            SELECT
+                grupo_paciente,
+                MIN(paciente) AS paciente,
+                MIN(nome_normalizado) AS nome_normalizado,
+                MIN(cartao_sus) FILTER (WHERE cartao_sus IS NOT NULL AND cartao_sus <> '') AS cartao_sus,
+                MIN(telefone) FILTER (WHERE telefone IS NOT NULL AND telefone <> '') AS telefone,
+                STRING_AGG(DISTINCT localidade, ', ' ORDER BY localidade) AS localidades,
+                STRING_AGG(DISTINCT regiao_mae, ', ' ORDER BY regiao_mae) AS regioes_mae,
+                MIN(data_nascimento) AS data_nascimento,
+                MAX(idade_anos) AS idade_anos,
+                MIN(data_laudo) AS primeira_data,
+                MAX(data_laudo) AS ultima_data,
+                COUNT(*) FILTER (WHERE origem_importacao IS DISTINCT FROM 'SEM_LAUDO')::int AS total_laudos,
+                COUNT(*) FILTER (WHERE tipo_laudo = 'MAMOGRAFIA')::int AS mamografias,
+                COUNT(*) FILTER (WHERE tipo_laudo LIKE 'USG_%')::int AS usgs,
+                COUNT(*) FILTER (WHERE paciente_id IS NULL)::int AS pendentes,
+                COUNT(*) FILTER (WHERE paciente_id IS NOT NULL AND origem_importacao IS DISTINCT FROM 'SEM_LAUDO')::int AS vinculados,
+                MIN(paciente_id) AS paciente_id,
+                COALESCE(JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'id', id,
+                        'tipoLaudo', tipo_laudo,
+                        'procedimento', procedimento_raw,
+                        'data', data_laudo,
+                        'statusVinculo', status_vinculo,
+                        'pacienteId', paciente_id,
+                        'arquivoOriginal', arquivo_original,
+                        'temArquivoLocal', caminho_armazenado IS NOT NULL AND caminho_armazenado <> '',
+                        'duplicadoDeId', duplicado_de_id,
+                        'motivo', vinculo_motivo
+                    )
+                    ORDER BY data_laudo DESC NULLS LAST, id DESC
+                ) FILTER (WHERE origem_importacao IS DISTINCT FROM 'SEM_LAUDO'), '[]'::json) AS documentos
+            FROM filtered
+            GROUP BY grupo_paciente
+        )
+        SELECT *
+        FROM grouped
+        ORDER BY ultima_data DESC NULLS LAST, paciente
+        LIMIT 500;
+    `;
+    const [summaryResult, rowsResult] = await Promise.all([
+        ociPool.query(summarySql, summaryValues),
+        ociPool.query(rowsSql, values),
+    ]);
+    const summary = summaryResult.rows[0] || {};
+    return {
+        access: {
+            level: access.level,
+            label: access.label,
+            localidades: access.localidades,
+            dateFrom: access.dateFrom,
+            dateTo: access.dateTo,
+        },
+        filters: {
+            dateFrom: effectiveFrom || null,
+            dateTo: effectiveTo || null,
+        },
+        kpis: {
+            totalPacientes: Number(summary.total_pacientes || 0),
+            totalLaudos: Number(summary.total_laudos || 0),
+            pacientesVinculados: Number(summary.pacientes_vinculados || 0),
+            pacientesPendentes: Number(summary.pacientes_pendentes || 0),
+            mamografias: Number(summary.mamografias || 0),
+            usgs: Number(summary.usgs || 0),
+            duplicadosLogicos: Number(summary.duplicados_logicos || 0),
+            pacComMamografia: Number(summary.pac_com_mamografia || 0),
+            pacComUsg: Number(summary.pac_com_usg || 0),
+            pacComUsgTransvaginal: Number(summary.pac_com_usg_tv || 0),
+            pacComUsgMama: Number(summary.pac_com_usg_mama || 0),
+            pacComUsgPelvica: Number(summary.pac_com_usg_pelvica || 0),
+        },
+        porTipo: summary.por_tipo || [],
+        porLocalidade: summary.por_localidade || [],
+        porRegiaoMae: summary.por_regiao_mae || [],
+        options: {
+            regioesMae: summary.options_regioes_mae || [],
+            localidades: summary.options_localidades || [],
+            tipos: summary.options_tipos || [],
+        },
+        rows: rowsResult.rows.map(row => ({
+            grupoPaciente: row.grupo_paciente,
+            paciente: row.paciente,
+            nomeNormalizado: row.nome_normalizado,
+            cartaoSus: row.cartao_sus,
+            telefone: row.telefone,
+            localidades: row.localidades,
+            regioesMae: row.regioes_mae,
+            dataNascimento: row.data_nascimento,
+            idadeAnos: row.idade_anos,
+            primeiraData: row.primeira_data,
+            ultimaData: row.ultima_data,
+            totalLaudos: Number(row.total_laudos || 0),
+            mamografias: Number(row.mamografias || 0),
+            usgs: Number(row.usgs || 0),
+            pendentes: Number(row.pendentes || 0),
+            vinculados: Number(row.vinculados || 0),
+            pacienteId: row.paciente_id,
+            documentos: row.documentos || [],
+        })),
+    };
+}
+
+async function queryPatientBankDocument(req, access, laudoId) {
+    const scopedReq = { query: {} };
+    const { whereSql, values } = buildPatientBankWhere(scopedReq, access);
+    const baseSql = patientBankBaseSql();
+    const sql = `
+        ${baseSql},
+        filtered AS (
+            SELECT * FROM base
+            ${whereSql}
+        )
+        SELECT id, arquivo_original, caminho_armazenado
+        FROM filtered
+        WHERE id = $${values.length + 1}::bigint
+        LIMIT 1;
+    `;
+    const result = await ociPool.query(sql, [...values, laudoId]);
+    return result.rows[0] || null;
+}
+
+function isInsideDirectory(baseDir, targetPath) {
+    const relative = path.relative(baseDir, targetPath);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function isPatientBankMaster(access) {
+    return access && access.level === 'master';
+}
+
+async function ensureLaudoReviewTable() {
+    await ociPool.query(`
+        CREATE TABLE IF NOT EXISTS oci.laudos_pacientes_revisoes (
+            id bigserial PRIMARY KEY,
+            laudo_id bigint NOT NULL REFERENCES oci.laudos_pacientes(id) ON DELETE CASCADE,
+            acao text NOT NULL,
+            paciente_id_anterior bigint NULL,
+            paciente_id_novo bigint NULL REFERENCES oci.pacientes(id),
+            revisado_por text NOT NULL DEFAULT 'master',
+            motivo text NULL,
+            criado_em timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_laudos_revisoes_laudo_id
+            ON oci.laudos_pacientes_revisoes(laudo_id);
+    `);
+}
+
+async function queryLaudoReviewCandidates(laudoId, search) {
+    const laudoResult = await ociPool.query(`
+        SELECT
+            id,
+            paciente_id,
+            nome_extraido,
+            nome_normalizado,
+            cartao_sus,
+            telefone,
+            tipo_laudo,
+            data_nascimento,
+            idade_anos,
+            status_vinculo,
+            arquivo_original
+        FROM oci.laudos_pacientes
+        WHERE id = $1::bigint
+        LIMIT 1;
+    `, [laudoId]);
+    const laudo = laudoResult.rows[0] || null;
+    if (!laudo) {
+        return null;
+    }
+
+    // dados extras do laudo usados como âncoras de decisão
+    const laudoExtra = await ociPool.query(`
+        SELECT data_realizacao, regiao_pasta FROM oci.laudos_pacientes WHERE id = $1::bigint
+    `, [laudoId]);
+    const dataLaudo = laudoExtra.rows[0]?.data_realizacao || null;
+    const regiaoLaudo = laudoExtra.rows[0]?.regiao_pasta || null;
+
+    const searchText = normalizeAccessText(search || laudo.nome_extraido || laudo.nome_normalizado || '');
+
+    // Candidatos por similaridade trigram OU por conter os tokens do nome,
+    // enriquecidos com âncoras: atendimento na data do laudo (±1 dia), regiões,
+    // municípios e datas dos atendimentos do candidato.
+    let candidates = [];
+    if (searchText) {
+        const candidateResult = await ociPool.query(`
+            SELECT
+                p.id,
+                p.nome_preferido,
+                p.patient_key,
+                (p.patient_key = $1) AS exact_match,
+                ROUND(similarity(p.patient_key, $1)::numeric, 3) AS similaridade,
+                EXISTS (
+                    SELECT 1 FROM oci.atendimentos a
+                    WHERE a.paciente_id = p.id
+                      AND $2::date IS NOT NULL
+                      AND ABS(a.data_atendimento - $2::date) <= 1
+                ) AS atendimento_na_data,
+                (
+                    SELECT STRING_AGG(DISTINCT a.regiao, ', ' ORDER BY a.regiao)
+                    FROM oci.atendimentos a WHERE a.paciente_id = p.id
+                ) AS regioes,
+                (
+                    SELECT STRING_AGG(DISTINCT m.nome, ', ' ORDER BY m.nome)
+                    FROM oci.atendimentos a JOIN oci.municipios m ON m.id = a.municipio_id
+                    WHERE a.paciente_id = p.id
+                ) AS municipios,
+                (
+                    SELECT STRING_AGG(DISTINCT TO_CHAR(a.data_atendimento, 'DD/MM/YYYY'), ', '
+                                      ORDER BY TO_CHAR(a.data_atendimento, 'DD/MM/YYYY'))
+                    FROM oci.atendimentos a WHERE a.paciente_id = p.id
+                ) AS datas_atendimento
+            FROM oci.pacientes p
+            WHERE similarity(p.patient_key, $1) >= 0.35
+               OR p.patient_key LIKE '%' || REPLACE($1, ' ', '%') || '%'
+            ORDER BY exact_match DESC, atendimento_na_data DESC, similaridade DESC, p.nome_preferido
+            LIMIT 20;
+        `, [searchText, dataLaudo]);
+        candidates = candidateResult.rows.map(row => ({
+            id: row.id,
+            nomePreferido: row.nome_preferido,
+            patientKey: row.patient_key,
+            exactMatch: row.exact_match === true,
+            similaridade: Number(row.similaridade || 0),
+            atendimentoNaData: row.atendimento_na_data === true,
+            regioes: row.regioes || '',
+            municipios: row.municipios || '',
+            datasAtendimento: row.datas_atendimento || '',
+        }));
+    }
+
+    return {
+        laudo: {
+            id: laudo.id,
+            pacienteId: laudo.paciente_id,
+            nomeExtraido: laudo.nome_extraido,
+            nomeNormalizado: laudo.nome_normalizado,
+            cartaoSus: laudo.cartao_sus,
+            telefone: laudo.telefone,
+            tipoLaudo: laudo.tipo_laudo,
+            dataNascimento: laudo.data_nascimento,
+            idadeAnos: laudo.idade_anos,
+            statusVinculo: laudo.status_vinculo,
+            arquivoOriginal: laudo.arquivo_original,
+            dataRealizacao: dataLaudo,
+            regiaoPasta: regiaoLaudo,
+        },
+        candidates,
+    };
+}
+
+async function applyLaudoManualReview(laudoId, payload) {
+    await ensureLaudoReviewTable();
+
+    const action = String(payload.acao || '').trim();
+    const motivo = String(payload.motivo || '').trim() || null;
+    const revisadoPor = String(payload.revisadoPor || 'master').trim() || 'master';
+    const pacienteId = payload.pacienteId ? Number(payload.pacienteId) : null;
+
+    if (!['vincular', 'nao_encontrado', 'ignorar', 'desvincular'].includes(action)) {
+        const error = new Error('Acao de revisao invalida.');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    if (action === 'vincular' && (!Number.isInteger(pacienteId) || pacienteId <= 0)) {
+        const error = new Error('Selecione um paciente para vincular.');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    if (action === 'desvincular' && String(payload.senha || '') !== UNLINK_PASSWORD) {
+        const error = new Error('Senha de desvinculação incorreta.');
+        error.statusCode = 403;
+        throw error;
+    }
+
+    const client = await ociPool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const laudoResult = await client.query(`
+            SELECT id, paciente_id
+            FROM oci.laudos_pacientes
+            WHERE id = $1::bigint
+            FOR UPDATE;
+        `, [laudoId]);
+        const laudo = laudoResult.rows[0];
+        if (!laudo) {
+            const error = new Error('Laudo nao encontrado.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        let newPacienteId = null;
+        if (action === 'vincular') {
+            const patientResult = await client.query(
+                'SELECT id FROM oci.pacientes WHERE id = $1::bigint LIMIT 1',
+                [pacienteId],
+            );
+            if (!patientResult.rowCount) {
+                const error = new Error('Paciente selecionado nao existe.');
+                error.statusCode = 400;
+                throw error;
+            }
+            newPacienteId = pacienteId;
+            await client.query(`
+                UPDATE oci.laudos_pacientes
+                SET paciente_id = $2::bigint,
+                    status_vinculo = 'revisado_manual',
+                    confianca_vinculo = 1,
+                    vinculo_motivo = COALESCE($3, 'revisao_manual')
+                WHERE id = $1::bigint;
+            `, [laudoId, newPacienteId, motivo]);
+        } else if (action === 'nao_encontrado') {
+            await client.query(`
+                UPDATE oci.laudos_pacientes
+                SET paciente_id = NULL,
+                    status_vinculo = 'nao_encontrado',
+                    confianca_vinculo = NULL,
+                    vinculo_motivo = COALESCE($2, 'revisao_manual_nao_encontrado')
+                WHERE id = $1::bigint;
+            `, [laudoId, motivo]);
+        } else if (action === 'desvincular') {
+            if (!laudo.paciente_id) {
+                const error = new Error('Este laudo ja esta sem vinculo.');
+                error.statusCode = 400;
+                throw error;
+            }
+            await client.query(`
+                UPDATE oci.laudos_pacientes
+                SET paciente_id = NULL,
+                    atendimento_procedimento_id = NULL,
+                    status_vinculo = 'pendente_revisao',
+                    confianca_vinculo = NULL,
+                    vinculo_motivo = COALESCE($2, 'desvinculado_manual')
+                WHERE id = $1::bigint;
+            `, [laudoId, motivo]);
+        } else {
+            await client.query(`
+                UPDATE oci.laudos_pacientes
+                SET status_vinculo = 'ignorado_revisao',
+                    vinculo_motivo = COALESCE($2, 'revisao_manual_ignorado')
+                WHERE id = $1::bigint;
+            `, [laudoId, motivo]);
+        }
+
+        await client.query(`
+            INSERT INTO oci.laudos_pacientes_revisoes (
+                laudo_id,
+                acao,
+                paciente_id_anterior,
+                paciente_id_novo,
+                revisado_por,
+                motivo
+            )
+            VALUES ($1, $2, $3, $4, $5, $6);
+        `, [laudoId, action, laudo.paciente_id, newPacienteId, revisadoPor, motivo]);
+
+        await client.query('COMMIT');
+        return { laudoId, acao: action, pacienteIdAnterior: laudo.paciente_id, pacienteIdNovo: newPacienteId };
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    } finally {
+        client.release();
+    }
 }
 
 function buildProcedureWhere(filters, startIndex = 1) {
@@ -281,6 +1044,7 @@ async function queryOciSummary(filters) {
     const data = result.rows[0] || { kpis: {}, por_oci: [] };
     const kpis = data.kpis || {};
     const productionTotals = await queryOciProductionTotals(filters);
+    const laudosKpis = await queryLaudosKpis(filters);
     const response = {
         kpis: {
             pacientesAtendidos: Number(kpis.pacientes_atendidos || 0),
@@ -293,6 +1057,7 @@ async function queryOciSummary(filters) {
             totalProcedimentosEConsultas: productionTotals.totalProcedimentosEConsultas,
             pendenciasSemOci: filters.canViewPending ? Number(kpis.pendencias_sem_oci || 0) : null,
         },
+        laudos: laudosKpis,
         porOci: (data.por_oci || []).map(row => {
             const item = {
                 codigoOci: row.codigo_oci,
@@ -309,6 +1074,55 @@ async function queryOciSummary(filters) {
         response.kpis.valorTotal = Number(kpis.valor_total || 0);
     }
     return response;
+}
+
+// KPIs de laudos vinculados por paciente, respeitando os filtros do dashboard.
+// "Pacientes no filtro" vêm dos atendimentos (regiao/competencia/busca); os
+// laudos contados são os vinculados e ativos desses pacientes — quando há
+// filtro de competência, o laudo também precisa ser do mesmo mês.
+async function queryLaudosKpis(filters) {
+    const { whereSql, values } = buildProcedureWhere(filters);
+    const params = [...values];
+    let laudoCompetenciaSql = '';
+    if (filters.competencia) {
+        params.push(filters.competencia);
+        laudoCompetenciaSql = `AND TO_CHAR(lp.data_realizacao, 'YYYY-MM') = $${params.length}`;
+    }
+    const sql = `
+        WITH pacientes_filtrados AS (
+            SELECT DISTINCT p.id
+            FROM oci.atendimentos a
+            JOIN oci.pacientes p ON p.id = a.paciente_id
+            JOIN oci.municipios m ON m.id = a.municipio_id
+            ${whereSql}
+        ),
+        laudos_validos AS (
+            SELECT DISTINCT lp.paciente_id, lp.tipo_laudo
+            FROM oci.laudos_pacientes lp
+            JOIN pacientes_filtrados pf ON pf.id = lp.paciente_id
+            WHERE lp.registro_ativo
+              AND lp.status_vinculo NOT IN ('descartado', 'quarentena')
+              ${laudoCompetenciaSql}
+        )
+        SELECT
+            (SELECT COUNT(*) FROM pacientes_filtrados) AS pacientes_totais,
+            COUNT(DISTINCT paciente_id) FILTER (WHERE tipo_laudo = 'MAMOGRAFIA') AS com_mamografia,
+            COUNT(DISTINCT paciente_id) FILTER (WHERE tipo_laudo LIKE 'USG%') AS com_usg,
+            COUNT(DISTINCT paciente_id) FILTER (WHERE tipo_laudo IN ('USG_TRANSVAGINAL', 'USG_TRANSVAGINAL_PELVICA')) AS com_usg_transvaginal,
+            COUNT(DISTINCT paciente_id) FILTER (WHERE tipo_laudo IN ('USG_MAMA', 'USG_MAMA_COMPLEMENTACAO')) AS com_usg_mama,
+            COUNT(DISTINCT paciente_id) FILTER (WHERE tipo_laudo IN ('USG_PELVICA', 'USG_TRANSVAGINAL_PELVICA')) AS com_usg_pelvica
+        FROM laudos_validos;
+    `;
+    const result = await ociPool.query(sql, params);
+    const row = result.rows[0] || {};
+    return {
+        pacientesTotais: Number(row.pacientes_totais || 0),
+        comLaudoMamografia: Number(row.com_mamografia || 0),
+        comLaudoUsg: Number(row.com_usg || 0),
+        comLaudoUsgTransvaginal: Number(row.com_usg_transvaginal || 0),
+        comLaudoUsgMama: Number(row.com_usg_mama || 0),
+        comLaudoUsgPelvica: Number(row.com_usg_pelvica || 0),
+    };
 }
 
 function proceduresForOci(codigoOci, sourceText = '') {
@@ -447,112 +1261,28 @@ async function queryOciNominal(filters) {
     });
 }
 async function queryOciProcedures(filters) {
+    // Lê o grão fino gravado pelo importador (scripts/importar-planilha-brenda.mjs)
+    // em oci.atendimento_procedimentos, em vez de derivar por regex do texto cru.
+    // Isso cobre também os formatos da aba JUNHO VALENCA (MAMO, USG.MAMA, etc.).
     const { whereSql, values } = buildProcedureWhere(filters);
     const sql = `
-        WITH base AS (
-            SELECT
-                a.atendimento_uid,
-                a.data_atendimento,
-                a.competencia,
-                a.regiao,
-                p.patient_key,
-                p.nome_preferido AS paciente,
-                m.nome AS municipio,
-                COALESCE(a.oci_agendada, '') AS oci_agendada,
-                COALESCE(a.oci_extra, '') AS oci_extra,
-                COALESCE(a.observacao, '') AS observacao,
-                UPPER(CONCAT_WS(' ', COALESCE(a.oci_agendada, ''), COALESCE(a.oci_extra, ''), COALESCE(a.observacao, ''))) AS texto,
-                STRING_AGG(DISTINCT ao.codigo_oci, '; ' ORDER BY ao.codigo_oci) AS codigos_oci
-            FROM oci.atendimentos a
-            JOIN oci.pacientes p ON p.id = a.paciente_id
-            JOIN oci.municipios m ON m.id = a.municipio_id
-            LEFT JOIN oci.atendimento_ocis ao ON ao.atendimento_uid = a.atendimento_uid
-            LEFT JOIN oci.ocis o ON o.codigo_oci = ao.codigo_oci
-            ${whereSql}
-            GROUP BY
-                a.atendimento_uid,
-                a.data_atendimento,
-                a.competencia,
-                a.regiao,
-                p.patient_key,
-                p.nome_preferido,
-                m.nome,
-                a.oci_agendada,
-                a.oci_extra,
-                a.observacao
-        ),
-        procedimentos_raw AS (
-            SELECT atendimento_uid, patient_key, 'Mama' AS categoria, 'Avaliacao inicial de mama: USG mamaria/Mamografia' AS procedimento, codigos_oci
-            FROM base
-            WHERE texto ~* '(^|[^A-Z0-9])MAMA I([^A-Z0-9]|$)'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Ginecologia', 'USG transvaginal', codigos_oci
-            FROM base
-            WHERE texto ~* '(^|[^A-Z0-9])GIN I([^A-Z0-9]|$)'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Ginecologia', 'USG pelvica', codigos_oci
-            FROM base
-            WHERE texto ~* '(^|[^A-Z0-9])GIN II([^A-Z0-9]|$)'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Colo do utero', 'Colposcopia', codigos_oci
-            FROM base
-            WHERE texto LIKE '%COLPOSCOPIA%'
-               OR texto LIKE '%COLO DO UTERO%'
-               OR texto LIKE '%INVESTIGACAO%COLO%'
-               OR texto LIKE '%INVESTIGAÇÃO%COLO%'
-               OR texto LIKE '%BIO%COLO%'
-               OR texto ~* '(^|[^A-Z0-9])COLO UTERO I([^A-Z0-9]|$)'
-               OR texto ~* '(^|[^A-Z0-9])COLO UTERO II([^A-Z0-9]|$)'
-               OR texto ~* '(^|[^A-Z0-9])TERAPEUTICA I([^A-Z0-9]|$)'
-               OR texto ~* '(^|[^A-Z0-9])TERAPEUTICA II([^A-Z0-9]|$)'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Colo do utero', 'Biopsia do colo uterino', codigos_oci
-            FROM base
-            WHERE texto LIKE '%BIO%COLO%'
-               OR texto LIKE '%BIÓPSIA%COLO%'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Mama', 'Biopsia de mama', codigos_oci
-            FROM base
-            WHERE texto LIKE '%PROGRESS%MAMA%'
-               OR texto LIKE '%BIO%MAMA%'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Colo do utero', 'Excisao tipo I do colo uterino', codigos_oci
-            FROM base
-            WHERE texto ~* '(^|[^A-Z0-9])COLO UTERO I([^A-Z0-9]|$)'
-               OR texto ~* '(^|[^A-Z0-9])TERAPEUTICA I([^A-Z0-9]|$)'
-
-            UNION ALL
-            SELECT atendimento_uid, patient_key, 'Colo do utero', 'Excisao tipo 2 do colo uterino', codigos_oci
-            FROM base
-            WHERE texto ~* '(^|[^A-Z0-9])COLO UTERO II([^A-Z0-9]|$)'
-               OR texto ~* '(^|[^A-Z0-9])TERAPEUTICA II([^A-Z0-9]|$)'
-        ),
-        procedimentos AS (
-            SELECT DISTINCT atendimento_uid, patient_key, categoria, procedimento, codigos_oci
-            FROM procedimentos_raw
-        )
         SELECT
-            p.procedimento,
-            p.categoria,
+            ap.procedimento,
+            CASE
+                WHEN ap.codigo_oci IN ('09.01.01.001-4', '09.01.01.010-3') THEN 'Mama'
+                WHEN ap.codigo_oci LIKE '09.06.%' THEN 'Ginecologia'
+                ELSE 'Colo do utero'
+            END AS categoria,
             COUNT(*)::int AS quantidade,
             COUNT(DISTINCT p.patient_key)::int AS pacientes_unicos,
-            COALESCE((
-                SELECT STRING_AGG(DISTINCT code.codigo, '; ' ORDER BY code.codigo)
-                FROM procedimentos p2
-                CROSS JOIN LATERAL regexp_split_to_table(COALESCE(p2.codigos_oci, ''), '; ') AS code(codigo)
-                WHERE p2.procedimento = p.procedimento
-                  AND p2.categoria = p.categoria
-                  AND code.codigo <> ''
-            ), '') AS ocis_relacionadas
-        FROM procedimentos p
-        GROUP BY p.procedimento, p.categoria
-        ORDER BY quantidade DESC, procedimento;
+            STRING_AGG(DISTINCT ap.codigo_oci, '; ' ORDER BY ap.codigo_oci) AS ocis_relacionadas
+        FROM oci.atendimento_procedimentos ap
+        JOIN oci.atendimentos a ON a.atendimento_uid = ap.atendimento_uid
+        JOIN oci.pacientes p ON p.id = a.paciente_id
+        JOIN oci.municipios m ON m.id = a.municipio_id
+        ${whereSql ? `${whereSql} AND ap.status = 'REALIZADO'` : `WHERE ap.status = 'REALIZADO'`}
+        GROUP BY ap.procedimento, categoria
+        ORDER BY quantidade DESC, ap.procedimento;
     `;
     const result = await ociPool.query(sql, values);
     return result.rows.map(row => ({
@@ -837,6 +1567,167 @@ app.post('/api/save', async (req, res) => {
     } catch (error) {
         console.error('Erro ao salvar os dados:', error);
         res.status(500).json({ success: false, message: 'Erro ao salvar os dados.' });
+    }
+});
+
+app.get('/api/pacientes-banco', async (req, res) => {
+    try {
+        const access = resolvePatientBankAccess(req);
+        if (!access) {
+            return res.status(403).json({
+                success: false,
+                message: 'Acesso nao autorizado para o Banco de Pacientes.',
+            });
+        }
+        const data = await queryPatientBank(req, access);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Erro ao carregar Banco de Pacientes:', error);
+        res.status(500).json({ success: false, message: 'Erro ao carregar Banco de Pacientes.' });
+    }
+});
+
+app.get('/api/pacientes-banco/laudos/:id/pdf', async (req, res) => {
+    try {
+        const access = resolvePatientBankAccess(req);
+        if (!access) {
+            return res.status(403).json({
+                success: false,
+                message: 'Acesso nao autorizado para abrir este laudo.',
+            });
+        }
+
+        const laudoId = Number(req.params.id);
+        if (!Number.isInteger(laudoId) || laudoId <= 0) {
+            return res.status(400).json({ success: false, message: 'ID de laudo invalido.' });
+        }
+
+        const document = await queryPatientBankDocument(req, access, laudoId);
+        if (!document || !document.caminho_armazenado) {
+            return res.status(404).json({ success: false, message: 'Laudo nao encontrado neste perfil de acesso.' });
+        }
+
+        const storageRoot = path.resolve(__dirname, 'storage');
+        const filePath = path.resolve(document.caminho_armazenado);
+        if (!isInsideDirectory(storageRoot, filePath) || path.extname(filePath).toLowerCase() !== '.pdf') {
+            return res.status(403).json({ success: false, message: 'Caminho de arquivo nao permitido.' });
+        }
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ success: false, message: 'Arquivo PDF nao encontrado no storage local.' });
+        }
+
+        res.sendFile(filePath, {
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `inline; filename="${path.basename(document.arquivo_original || filePath).replace(/"/g, '')}"`,
+                'X-Content-Type-Options': 'nosniff',
+            },
+        });
+    } catch (error) {
+        console.error('Erro ao abrir PDF do Banco de Pacientes:', error);
+        res.status(500).json({ success: false, message: 'Erro ao abrir PDF do laudo.' });
+    }
+});
+
+app.get('/api/pacientes-banco/laudos/:id/candidatos', async (req, res) => {
+    try {
+        const access = resolvePatientBankAccess(req);
+        if (!isPatientBankMaster(access)) {
+            return res.status(403).json({ success: false, message: 'A revisao manual exige senha master.' });
+        }
+
+        const laudoId = Number(req.params.id);
+        if (!Number.isInteger(laudoId) || laudoId <= 0) {
+            return res.status(400).json({ success: false, message: 'ID de laudo invalido.' });
+        }
+
+        const data = await queryLaudoReviewCandidates(laudoId, req.query.search);
+        if (!data) {
+            return res.status(404).json({ success: false, message: 'Laudo nao encontrado.' });
+        }
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Erro ao buscar candidatos para revisao:', error);
+        res.status(500).json({ success: false, message: 'Erro ao buscar candidatos para revisao.' });
+    }
+});
+
+app.post('/api/pacientes-banco/laudos/:id/revisao', async (req, res) => {
+    try {
+        const access = resolvePatientBankAccess(req);
+        if (!isPatientBankMaster(access)) {
+            return res.status(403).json({ success: false, message: 'A revisao manual exige senha master.' });
+        }
+
+        const laudoId = Number(req.params.id);
+        if (!Number.isInteger(laudoId) || laudoId <= 0) {
+            return res.status(400).json({ success: false, message: 'ID de laudo invalido.' });
+        }
+
+        const data = await applyLaudoManualReview(laudoId, req.body || {});
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Erro ao aplicar revisao manual:', error);
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.statusCode ? error.message : 'Erro ao aplicar revisao manual.',
+        });
+    }
+});
+
+// Administração: documentos em quarentena (fora do escopo mamografia/USG)
+app.get('/api/pacientes-banco/quarentena', async (req, res) => {
+    try {
+        const access = resolvePatientBankAccess(req);
+        if (!isPatientBankMaster(access)) {
+            return res.status(403).json({ success: false, message: 'A administracao exige senha master.' });
+        }
+        const result = await ociPool.query(`
+            SELECT id, arquivo_original, titulo_raw, nome_extraido, data_realizacao,
+                   caminho_origem, status_vinculo, vinculo_motivo, criado_em
+            FROM oci.laudos_pacientes
+            WHERE status_vinculo IN ('quarentena', 'descartado')
+            ORDER BY (status_vinculo = 'descartado'), arquivo_original;
+        `);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Erro ao listar quarentena:', error);
+        res.status(500).json({ success: false, message: 'Erro ao listar quarentena.' });
+    }
+});
+
+// Exclui (descarta) um laudo em quarentena. Soft delete: a linha permanece
+// para auditoria com status "descartado" e sai de todas as listagens.
+app.post('/api/pacientes-banco/laudos/:id/descartar', async (req, res) => {
+    try {
+        const access = resolvePatientBankAccess(req);
+        if (!isPatientBankMaster(access)) {
+            return res.status(403).json({ success: false, message: 'A exclusao exige senha master.' });
+        }
+        const laudoId = Number(req.params.id);
+        if (!Number.isInteger(laudoId) || laudoId <= 0) {
+            return res.status(400).json({ success: false, message: 'ID de laudo invalido.' });
+        }
+        await ensureLaudoReviewTable();
+        const result = await ociPool.query(`
+            UPDATE oci.laudos_pacientes
+            SET status_vinculo = 'descartado', registro_ativo = false,
+                vinculo_motivo = COALESCE($2, 'descartado_pela_administracao')
+            WHERE id = $1::bigint AND status_vinculo IN ('quarentena', 'descartado')
+            RETURNING id;
+        `, [laudoId, String(req.body?.motivo || '').trim() || null]);
+        if (!result.rowCount) {
+            return res.status(400).json({ success: false, message: 'Somente laudos em quarentena podem ser descartados.' });
+        }
+        await ociPool.query(`
+            INSERT INTO oci.laudos_pacientes_revisoes (laudo_id, acao, revisado_por, motivo)
+            VALUES ($1, 'descartar', $2, $3);
+        `, [laudoId, String(req.body?.revisadoPor || 'master'), String(req.body?.motivo || '') || null]);
+        res.json({ success: true, data: { laudoId } });
+    } catch (error) {
+        console.error('Erro ao descartar laudo:', error);
+        res.status(500).json({ success: false, message: 'Erro ao descartar laudo.' });
     }
 });
 

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banco de Pacientes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="pacientes.css">
+</head>
+<body>
+    <div class="patients-shell">
+        <header class="patients-header">
+            <div class="brand-block">
+                <img src="logo-especialistas.png" alt="Agora tem Especialistas" class="brand-logo">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-hospital-user"></i>
+                </div>
+                <div>
+                    <h1>Banco de Pacientes</h1>
+                    <p>Laudos validados vinculados ao PostgreSQL local</p>
+                </div>
+            </div>
+            <nav class="header-actions">
+                <a href="index.html" class="btn secondary"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+                <a href="ocis.html" class="btn secondary"><i class="fa-solid fa-database"></i> OCIs</a>
+                <a href="desmobilizacao.html" class="btn secondary"><i class="fa-solid fa-people-group"></i> Desmobiliza&ccedil;&atilde;o</a>
+            </nav>
+        </header>
+
+        <section class="access-panel">
+            <div>
+                <span class="eyebrow"><i class="fa-solid fa-shield-halved"></i> Acesso controlado</span>
+                <h2>Libere o perfil para carregar pacientes</h2>
+                <p>O servidor aplica as regras de localidade e periodo antes de retornar os dados.</p>
+            </div>
+            <form id="accessForm" class="access-form">
+                <input id="accessKey" type="password" autocomplete="current-password" placeholder="Senha ou chave do perfil">
+                <button class="btn primary" type="submit"><i class="fa-solid fa-unlock-keyhole"></i> Entrar</button>
+                <button id="clearAccess" class="btn ghost" type="button" title="Limpar acesso"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </form>
+            <span id="accessBadge" class="access-badge locked">Bloqueado</span>
+        </section>
+
+        <section class="filter-panel">
+            <div class="field">
+                <label for="filterRegiaoMae">Compet&ecirc;ncia</label>
+                <select id="filterRegiaoMae">
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="filterLocalidade">Localidade</label>
+                <select id="filterLocalidade">
+                    <option value="">Todas permitidas</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="filterTipo">Tipo de laudo</label>
+                <select id="filterTipo">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="filterLaudoModo">Com / sem laudo</label>
+                <label class="laudo-modo-switch" title="Define se o filtro de tipo mostra pacientes COM ou SEM esse laudo">
+                    <input id="filterLaudoModo" type="checkbox">
+                    <span class="laudo-modo-track"><span class="laudo-modo-thumb"></span></span>
+                    <span id="laudoModoText">Com laudo</span>
+                </label>
+            </div>
+            <div class="field">
+                <label for="filterStatus">Status</label>
+                <select id="filterStatus">
+                    <option value="">Todos</option>
+                    <option value="vinculado">Vinculados</option>
+                    <option value="orfao">&Oacute;rf&atilde;os (laudo sem paciente)</option>
+                    <option value="pendente">Pendentes de revis&atilde;o</option>
+                    <option value="revisado">Revisados manualmente</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="filterIdade">Idade</label>
+                <select id="filterIdade">
+                    <option value="">Todas</option>
+                    <option value="40mais">40 anos ou mais</option>
+                    <option value="menor40">Menos de 40 anos</option>
+                    <option value="desconhecida">Idade desconhecida</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="filterDateFrom">De</label>
+                <input id="filterDateFrom" type="date">
+            </div>
+            <div class="field">
+                <label for="filterDateTo">Ate</label>
+                <input id="filterDateTo" type="date">
+            </div>
+            <div class="field search-field">
+                <label for="filterSearch">Busca</label>
+                <div class="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="filterSearch" type="search" placeholder="Nome, CNS, telefone ou procedimento">
+                </div>
+            </div>
+        </section>
+
+        <main>
+            <section class="kpi-grid">
+                <article class="kpi-card accent-blue">
+                    <span>Pacientes</span>
+                    <strong id="kpiPatients">0</strong>
+                    <small>Grupos unicos no filtro</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span>Laudos</span>
+                    <strong id="kpiReports">0</strong>
+                    <small>PDFs registrados no banco</small>
+                </article>
+                <article class="kpi-card accent-green">
+                    <span>Vinculados</span>
+                    <strong id="kpiLinked">0</strong>
+                    <small>Laudos com paciente_id resolvido</small>
+                </article>
+                <article class="kpi-card accent-red">
+                    <span>Pendentes</span>
+                    <strong id="kpiPending">0</strong>
+                    <small>Laudos para revisao manual</small>
+                </article>
+                <article class="kpi-card accent-blue">
+                    <span>Mamografias</span>
+                    <strong id="kpiMammo">0</strong>
+                    <small>Laudos de mamografia</small>
+                </article>
+                <article class="kpi-card accent-slate">
+                    <span>USGs</span>
+                    <strong id="kpiUsg">0</strong>
+                    <small>Laudos de ultrassom</small>
+                </article>
+            </section>
+
+            <section class="kpi-grid" aria-label="Pacientes por tipo de laudo">
+                <article class="kpi-card accent-blue">
+                    <span>Com laudo de Mamografia</span>
+                    <strong id="kpiPacMamografia">0</strong>
+                    <small>Pacientes &uacute;nicos no filtro</small>
+                </article>
+                <article class="kpi-card accent-green">
+                    <span>Com laudo de USG</span>
+                    <strong id="kpiPacUsg">0</strong>
+                    <small>Qualquer tipo de ultrassom</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span>USG Transvaginal</span>
+                    <strong id="kpiPacUsgTv">0</strong>
+                    <small>Inclui combinado TV/p&eacute;lvica</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span>USG de Mama</span>
+                    <strong id="kpiPacUsgMama">0</strong>
+                    <small>Normal ou complementa&ccedil;&atilde;o</small>
+                </article>
+                <article class="kpi-card accent-teal">
+                    <span>USG P&eacute;lvica</span>
+                    <strong id="kpiPacUsgPelvica">0</strong>
+                    <small>Inclui combinado TV/p&eacute;lvica</small>
+                </article>
+            </section>
+
+            <section class="content-grid">
+                <article class="panel patient-panel">
+                    <div class="panel-head">
+                        <div>
+                            <h2><i class="fa-solid fa-users-viewfinder"></i> Pacientes e vinculos</h2>
+                            <p id="resultSummary">Informe a chave de acesso para carregar.</p>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button id="adminBtn" class="btn danger hidden" type="button"><i class="fa-solid fa-shield-halved"></i> Administra&ccedil;&atilde;o</button>
+                            <button id="refreshBtn" class="btn secondary" type="button"><i class="fa-solid fa-rotate"></i> Atualizar</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th>Paciente</th>
+                                    <th>Compet&ecirc;ncia</th>
+                                    <th>Localidade</th>
+                                    <th>Nascimento / idade</th>
+                                    <th>Laudos</th>
+                                    <th>Status</th>
+                                    <th>Ultimo laudo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="patientRows">
+                                <tr><td colspan="8" class="empty-cell">Aguardando acesso.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+
+                <aside class="side-stack">
+                    <article class="panel">
+                        <div class="panel-head compact">
+                            <h2><i class="fa-solid fa-map"></i> Compet&ecirc;ncias</h2>
+                        </div>
+                        <div id="motherRegionList" class="metric-list"></div>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-head compact">
+                            <h2><i class="fa-solid fa-chart-pie"></i> Tipos</h2>
+                        </div>
+                        <div id="typeList" class="metric-list"></div>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-head compact">
+                            <h2><i class="fa-solid fa-location-dot"></i> Localidades</h2>
+                        </div>
+                        <div id="localityList" class="metric-list"></div>
+                    </article>
+                    <article class="panel note-panel">
+                        <h2><i class="fa-solid fa-cloud-arrow-up"></i> Arquivos</h2>
+                        <p>Por enquanto esta tela mostra os vinculos, metadados e PDFs locais. Laudos apos 05/06/2026 ficam em espera ate a carga dos pacientes da competencia seguinte.</p>
+                    </article>
+                </aside>
+            </section>
+        </main>
+    </div>
+    <div id="reviewModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="reviewTitle">
+        <div class="modal-card review-card">
+            <div class="modal-head">
+                <div>
+                    <h2 id="reviewTitle">Revis&atilde;o manual do laudo</h2>
+                    <p id="reviewSubtitle">Selecione um paciente ou registre a decis&atilde;o.</p>
+                </div>
+                <button id="reviewClose" class="icon-button" type="button" title="Fechar">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="reviewLaudoInfo" class="review-laudo-info"></div>
+            <div class="review-search">
+                <label for="reviewSearch">Buscar paciente</label>
+                <div class="review-search-row">
+                    <input id="reviewSearch" type="search" placeholder="Nome do paciente">
+                    <button id="reviewSearchBtn" class="btn secondary" type="button"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+                </div>
+            </div>
+            <div id="reviewCandidates" class="review-candidates"></div>
+            <div class="review-reason">
+                <label for="reviewReason">Motivo / observa&ccedil;&atilde;o</label>
+                <textarea id="reviewReason" rows="3" placeholder="Ex.: nome e nascimento conferidos no PDF"></textarea>
+            </div>
+            <div class="review-actions">
+                <button id="reviewLinkBtn" class="btn primary" type="button" disabled><i class="fa-solid fa-link"></i> Confirmar v&iacute;nculo</button>
+                <button id="reviewNotFoundBtn" class="btn secondary" type="button"><i class="fa-solid fa-user-slash"></i> Marcar n&atilde;o encontrado</button>
+                <button id="reviewIgnoreBtn" class="btn ghost" type="button"><i class="fa-solid fa-eye-slash"></i> Ignorar</button>
+            </div>
+        </div>
+    </div>
+    <div id="adminModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+        <div class="modal-card admin-card">
+            <div class="modal-head">
+                <div>
+                    <h2 id="adminTitle"><i class="fa-solid fa-shield-halved"></i> Administra&ccedil;&atilde;o &mdash; Quarentena</h2>
+                    <p>Documentos fora do escopo (axilas, tireoide, atestados, administrativos). Excluir tira o documento das listagens e contagens; o registro fica auditado como descartado.</p>
+                </div>
+                <button id="adminClose" class="icon-button" type="button" title="Fechar">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="admin-body">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Documento</th>
+                            <th>Paciente no arquivo</th>
+                            <th>Data</th>
+                            <th>Origem</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="quarantineList">
+                        <tr><td colspan="6">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="toast hidden"></div>
+    <script src="pacientes.js"></script>
+</body>
+</html>
