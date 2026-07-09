@@ -720,7 +720,13 @@ function clearPortalSessionCookie(res) {
 }
 
 function normalizePortalLogin(login) {
-    return String(login || '').trim().toLowerCase();
+    return String(login || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '.')
+        .replace(/^\.+|\.+$/g, '');
 }
 
 async function ensurePortalGestorSchema() {

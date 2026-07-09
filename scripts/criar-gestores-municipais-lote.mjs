@@ -119,14 +119,22 @@ async function main() {
         await client.query('BEGIN');
         await ensureSchema(client);
         const municipios = await client.query('SELECT id, nome FROM oci.municipios');
-        const missing = [];
+        const municipioCache = new Map(municipios.rows.map(row => [normalizeText(row.nome), row]));
+        const createdMunicipios = [];
         const saved = [];
 
         for (const gestor of selected) {
-            const municipioRow = municipios.rows.find(row => normalizeText(row.nome) === normalizeText(gestor.municipio));
+            let municipioRow = municipioCache.get(normalizeText(gestor.municipio));
             if (!municipioRow) {
-                missing.push(gestor.municipio);
-                continue;
+                const created = await client.query(`
+                    INSERT INTO oci.municipios (nome)
+                    VALUES ($1)
+                    ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome
+                    RETURNING id, nome
+                `, [gestor.municipio]);
+                municipioRow = created.rows[0];
+                municipioCache.set(normalizeText(municipioRow.nome), municipioRow);
+                createdMunicipios.push(municipioRow.nome);
             }
 
             const login = loginFromMunicipio(gestor.municipio);
@@ -146,12 +154,12 @@ async function main() {
             saved.push({ id: result.rows[0].id, login, senha, municipio: municipioRow.nome, nome: gestor.nome });
         }
 
-        if (missing.length) {
-            throw new Error(`Municipios nao encontrados em oci.municipios: ${[...new Set(missing)].join(', ')}`);
-        }
-
         await client.query('COMMIT');
         console.table(saved);
+        if (createdMunicipios.length) {
+            console.log('\nMunicipios criados automaticamente em oci.municipios:');
+            console.table(createdMunicipios.map(nome => ({ municipio: nome })));
+        }
         if (duplicates.length) {
             console.log('\nMunicipios repetidos ignorados porque o login solicitado e o proprio municipio:');
             console.table(duplicates.map(item => ({
