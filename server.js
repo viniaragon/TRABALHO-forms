@@ -69,6 +69,14 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/pacientes/laudos', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'portal-gestor.html'));
+});
+
+app.get('/portal-gestor', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'portal-gestor.html'));
+});
+
 // Ordem de preferência: OCI_DB_* (explícito) -> POSTGRES_* (injetado pelo
 // Zeabur quando há um serviço PostgreSQL no mesmo projeto) -> local (Docker).
 const ociPool = new Pool({
