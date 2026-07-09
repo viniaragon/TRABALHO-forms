@@ -941,28 +941,9 @@ async function requirePortalGestor(req, res) {
     return session;
 }
 
-const PORTAL_MUNICIPIO_NORM_SQL = `
-    UPPER(TRANSLATE(BTRIM(m.nome), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
-`;
-
-const PORTAL_LAUDO_MUNICIPIO_NORM_SQL = `
-    CASE
-        WHEN NULLIF(BTRIM(lp.municipio_paciente), '') IS NOT NULL
-            AND LENGTH(BTRIM(lp.municipio_paciente)) <= 80
-            AND lp.municipio_paciente !~* '(RESULTADO|PRONT|POWERED|MAMOGRAFIA| ID:| TIPO:)'
-        THEN UPPER(TRANSLATE(BTRIM(lp.municipio_paciente), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
-        ELSE NULL
-    END
-`;
-
 function portalGestorBaseSql() {
     return `
-        WITH portal_municipio AS (
-            SELECT m.id, m.nome, ${PORTAL_MUNICIPIO_NORM_SQL} AS municipio_norm
-            FROM oci.municipios m
-            WHERE m.id = $1::bigint
-        ),
-        patients_scope AS (
+        WITH patients_scope AS (
             SELECT
                 'P:' || p.id::text AS grupo,
                 p.id AS paciente_id,
@@ -999,17 +980,13 @@ function portalGestorBaseSql() {
                 COALESCE(p.nome_preferido, lp.nome_extraido) AS paciente_resolvido,
                 p.cpf AS paciente_cpf,
                 p.cns AS paciente_cns,
-                p.data_nascimento AS paciente_nascimento,
-                ${PORTAL_LAUDO_MUNICIPIO_NORM_SQL} AS municipio_norm
+                p.data_nascimento AS paciente_nascimento
             FROM oci.laudos_pacientes lp
             LEFT JOIN oci.pacientes p ON p.id = lp.paciente_id
         ),
         docs_scope AS (
             SELECT
-                CASE
-                    WHEN ps.grupo IS NOT NULL THEN ps.grupo
-                    ELSE 'L:' || COALESCE(NULLIF(ln.nome_normalizado, ''), 'SEM_NOME') || ':' || COALESCE(ln.data_nascimento::text, ln.idade_anos::text, 'SEMIDADE')
-                END AS grupo,
+                ps.grupo,
                 ln.id,
                 ln.paciente_id,
                 ln.paciente_resolvido AS paciente,
@@ -1031,14 +1008,9 @@ function portalGestorBaseSql() {
                 ln.caminho_armazenado,
                 ln.vinculo_motivo
             FROM laudos_norm ln
-            CROSS JOIN portal_municipio pm
-            LEFT JOIN patients_scope ps ON ps.paciente_id = ln.paciente_id
+            JOIN patients_scope ps ON ps.paciente_id = ln.paciente_id
             WHERE COALESCE(ln.registro_ativo, true)
               AND ln.status_vinculo <> 'descartado'
-              AND (
-                ln.municipio_norm = pm.municipio_norm
-                OR (ln.municipio_norm IS NULL AND ps.paciente_id IS NOT NULL)
-              )
         ),
         grouped AS (
             SELECT
