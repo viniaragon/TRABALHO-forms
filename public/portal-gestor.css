@@ -204,7 +204,7 @@ select {
 
 .filter-panel {
     display: grid;
-    grid-template-columns: minmax(280px, 1fr) 190px 150px 155px 190px 145px 145px;
+    grid-template-columns: minmax(280px, 1fr) 190px 150px 145px 145px;
     gap: 12px;
     margin-top: 14px;
     padding: 14px;
@@ -253,8 +253,7 @@ select {
     border-top-color: var(--green);
 }
 
-.kpi-card:nth-child(5),
-.kpi-card.alert {
+.kpi-card:nth-child(5) {
     border-top-color: var(--amber);
 }
 
@@ -366,19 +365,9 @@ tbody tr:nth-child(even) {
     white-space: nowrap;
 }
 
-.pill.warning {
-    background: #fffbeb;
-    color: var(--amber);
-}
-
 .pill.info {
     background: #ecfdff;
     color: #006c89;
-}
-
-.pill.neutral {
-    background: #f2f4f7;
-    color: var(--slate);
 }
 
 .detail-row td {

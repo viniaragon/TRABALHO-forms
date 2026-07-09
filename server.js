@@ -1079,27 +1079,6 @@ function portalGestorBaseSql() {
     `;
 }
 
-function buildPortalAlerts(row) {
-    const idade = Number.isFinite(row.idadeAnos) ? row.idadeAnos : null;
-    const alerts = [];
-    if (idade === null) {
-        alerts.push({ key: 'idade_desconhecida', label: 'Idade desconhecida', level: 'neutral' });
-    }
-    if (!row.totalLaudos) {
-        alerts.push({ key: 'sem_laudo', label: 'Sem laudo disponivel', level: 'warning' });
-    }
-    if (idade !== null && idade >= 40 && !row.mamografias) {
-        alerts.push({ key: '40mais_sem_mamografia', label: '40+ sem mamografia', level: 'warning' });
-    }
-    if (idade !== null && idade >= 40 && !row.mamografias && row.usgMama > 0) {
-        alerts.push({ key: '40mais_apenas_usg_mama', label: '40+ apenas USG mama', level: 'info' });
-    }
-    if (idade !== null && idade < 40 && row.mamografias > 0) {
-        alerts.push({ key: 'menor40_com_mamografia', label: 'Menor de 40 com mamografia', level: 'warning' });
-    }
-    return alerts;
-}
-
 function portalRowMatchesFilters(row, filters) {
     if (filters.search) {
         const haystack = [
@@ -1115,13 +1094,9 @@ function portalRowMatchesFilters(row, filters) {
     if (filters.tipo && !(row.documentos || []).some(doc => doc.tipoLaudo === filters.tipo)) {
         return false;
     }
-    if (filters.status === 'com_laudo' && !row.totalLaudos) return false;
-    if (filters.status === 'sem_laudo' && row.totalLaudos) return false;
-    if (filters.status === 'pendente' && !row.pendentes) return false;
     if (filters.faixaIdade === '40mais' && !(row.idadeAnos >= 40)) return false;
     if (filters.faixaIdade === 'menor40' && !(row.idadeAnos < 40)) return false;
     if (filters.faixaIdade === 'desconhecida' && row.idadeAnos !== null) return false;
-    if (filters.alerta && !(row.alertas || []).some(alert => alert.key === filters.alerta)) return false;
     const dateFrom = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00Z`) : null;
     const dateTo = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59Z`) : null;
     if (dateFrom || dateTo) {
@@ -1154,43 +1129,33 @@ async function queryPortalGestorPacientes(req, user) {
             usgMama: Number(row.usg_mama || 0),
             usgTransvaginal: Number(row.usg_transvaginal || 0),
             usgs: Number(row.usgs || 0),
-            pendentes: Number(row.pendentes || 0),
             documentos: row.documentos || [],
         };
-        mapped.alertas = buildPortalAlerts(mapped);
         return mapped;
     });
 
     const filters = {
         search: String(req.query.search || '').trim(),
         tipo: String(req.query.tipo || '').trim().toUpperCase(),
-        status: String(req.query.status || '').trim().toLowerCase(),
         faixaIdade: String(req.query.faixaIdade || '').trim().toLowerCase(),
-        alerta: String(req.query.alerta || '').trim().toLowerCase(),
         dateFrom: String(req.query.dateFrom || '').trim(),
         dateTo: String(req.query.dateTo || '').trim(),
     };
-    const rows = allRows.filter(row => portalRowMatchesFilters(row, filters));
-    const tipos = [...new Set(allRows.flatMap(row => (row.documentos || []).map(doc => doc.tipoLaudo).filter(Boolean)))].sort();
-    const alertaOptions = [
-        { key: '40mais_sem_mamografia', label: '40+ sem mamografia' },
-        { key: '40mais_apenas_usg_mama', label: '40+ apenas USG mama' },
-        { key: 'menor40_com_mamografia', label: 'Menor de 40 com mamografia' },
-        { key: 'sem_laudo', label: 'Sem laudo disponivel' },
-        { key: 'idade_desconhecida', label: 'Idade desconhecida' },
-    ];
+    const scopedRows = allRows.filter(row => row.totalLaudos > 0);
+    const rows = scopedRows.filter(row => portalRowMatchesFilters(row, filters));
+    const tipos = [...new Set(scopedRows.flatMap(row => (row.documentos || []).map(doc => doc.tipoLaudo).filter(Boolean)))].sort();
     return {
         user,
         filters,
         kpis: {
             totalPacientes: rows.length,
+            totalLaudos: rows.reduce((sum, row) => sum + row.totalLaudos, 0),
             comMamografia: rows.filter(row => row.mamografias > 0).length,
             comUsgMama: rows.filter(row => row.usgMama > 0).length,
             comUsgTransvaginal: rows.filter(row => row.usgTransvaginal > 0).length,
-            semLaudo: rows.filter(row => row.totalLaudos === 0).length,
-            comAlerta: rows.filter(row => row.alertas.length > 0).length,
+            totalUsgs: rows.reduce((sum, row) => sum + row.usgs, 0),
         },
-        options: { tipos, alertas: alertaOptions },
+        options: { tipos },
         rows: rows.slice(0, 500),
         totalRows: rows.length,
     };

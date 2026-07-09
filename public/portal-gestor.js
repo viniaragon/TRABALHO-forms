@@ -10,8 +10,6 @@ const municipioLabel = document.getElementById('municipioLabel');
 const searchInput = document.getElementById('searchInput');
 const typeFilter = document.getElementById('typeFilter');
 const ageFilter = document.getElementById('ageFilter');
-const statusFilter = document.getElementById('statusFilter');
-const alertFilter = document.getElementById('alertFilter');
 const dateFrom = document.getElementById('dateFrom');
 const dateTo = document.getElementById('dateTo');
 const refreshButton = document.getElementById('refreshButton');
@@ -20,11 +18,11 @@ const resultSummary = document.getElementById('resultSummary');
 const toast = document.getElementById('toast');
 
 const kpiPatients = document.getElementById('kpiPatients');
+const kpiReports = document.getElementById('kpiReports');
 const kpiMammo = document.getElementById('kpiMammo');
 const kpiUsgMama = document.getElementById('kpiUsgMama');
 const kpiUsgTv = document.getElementById('kpiUsgTv');
-const kpiSemLaudo = document.getElementById('kpiSemLaudo');
-const kpiAlertas = document.getElementById('kpiAlertas');
+const kpiUsgTotal = document.getElementById('kpiUsgTotal');
 
 let currentUser = null;
 let currentRows = [];
@@ -98,8 +96,6 @@ function buildParams() {
     if (searchInput.value.trim()) params.set('search', searchInput.value.trim());
     if (typeFilter.value) params.set('tipo', typeFilter.value);
     if (ageFilter.value) params.set('faixaIdade', ageFilter.value);
-    if (statusFilter.value) params.set('status', statusFilter.value);
-    if (alertFilter.value) params.set('alerta', alertFilter.value);
     if (dateFrom.value) params.set('dateFrom', dateFrom.value);
     if (dateTo.value) params.set('dateTo', dateTo.value);
     return params;
@@ -133,7 +129,6 @@ async function loadPatients() {
         const data = await apiFetch(`/api/portal-gestor/pacientes?${buildParams().toString()}`);
         currentRows = data.rows || [];
         renderSelectOptions(typeFilter, data.options.tipos || [], item => item, item => item);
-        renderSelectOptions(alertFilter, data.options.alertas || [], item => item.key, item => item.label);
         renderKpis(data.kpis || {});
         renderRows();
         const trunc = data.totalRows > currentRows.length
@@ -153,16 +148,16 @@ async function loadPatients() {
 
 function renderKpis(kpis) {
     kpiPatients.textContent = formatNumber(kpis.totalPacientes);
+    kpiReports.textContent = formatNumber(kpis.totalLaudos);
     kpiMammo.textContent = formatNumber(kpis.comMamografia);
     kpiUsgMama.textContent = formatNumber(kpis.comUsgMama);
     kpiUsgTv.textContent = formatNumber(kpis.comUsgTransvaginal);
-    kpiSemLaudo.textContent = formatNumber(kpis.semLaudo);
-    kpiAlertas.textContent = formatNumber(kpis.comAlerta);
+    kpiUsgTotal.textContent = formatNumber(kpis.totalUsgs);
 }
 
 function renderRows() {
     if (!currentRows.length) {
-        patientRows.innerHTML = '<tr><td colspan="9" class="empty-cell">Nenhum paciente encontrado para os filtros atuais.</td></tr>';
+        patientRows.innerHTML = '<tr><td colspan="8" class="empty-cell">Nenhum paciente encontrado para os filtros atuais.</td></tr>';
         return;
     }
     patientRows.innerHTML = currentRows.map((row, index) => {
@@ -171,7 +166,6 @@ function renderRows() {
         const age = row.dataNascimento
             ? `${formatDate(row.dataNascimento)}${row.idadeAnos !== null ? ` / ${row.idadeAnos} anos` : ''}`
             : (row.idadeAnos !== null ? `${row.idadeAnos} anos` : '-');
-        const alerts = (row.alertas || []).map(alert => `<span class="pill ${escapeHtml(alert.level)}">${escapeHtml(alert.label)}</span>`).join('');
         const laudos = [
             row.mamografias ? `<span class="pill">MAMO ${formatNumber(row.mamografias)}</span>` : '',
             row.usgMama ? `<span class="pill">USG mama ${formatNumber(row.usgMama)}</span>` : '',
@@ -192,7 +186,6 @@ function renderRows() {
                 <td>${escapeHtml(age)}</td>
                 <td>${escapeHtml(row.procedimentos || '-')}</td>
                 <td><strong>${formatNumber(row.totalLaudos)}</strong><div>${laudos || '-'}</div></td>
-                <td>${alerts || '<span class="pill neutral">Sem alerta</span>'}</td>
                 <td>${formatDate(row.ultimaData)}</td>
             </tr>
             ${isOpen ? renderDetails(row) : ''}
@@ -231,11 +224,11 @@ function renderDetails(row) {
                 </div>
             `;
         }).join('')
-        : '<div class="meta">Nenhum laudo disponivel para este paciente.</div>';
+        : '<div class="meta">Nenhum documento para exibir.</div>';
 
     return `
         <tr class="detail-row">
-            <td colspan="9">
+            <td colspan="8">
                 <div class="detail-panel">
                     <div class="detail-grid">
                         <section class="detail-box">
@@ -288,7 +281,7 @@ logoutButton.addEventListener('click', async () => {
 
 refreshButton.addEventListener('click', loadPatients);
 
-[typeFilter, ageFilter, statusFilter, alertFilter, dateFrom, dateTo].forEach(control => {
+[typeFilter, ageFilter, dateFrom, dateTo].forEach(control => {
     control.addEventListener('change', () => {
         expandedRows.clear();
         loadPatients();

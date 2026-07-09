@@ -66,22 +66,6 @@
                     <option value="">Todas</option>
                     <option value="40mais">40 anos ou mais</option>
                     <option value="menor40">Menos de 40 anos</option>
-                    <option value="desconhecida">Idade desconhecida</option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="statusFilter">Status</label>
-                <select id="statusFilter">
-                    <option value="">Todos</option>
-                    <option value="com_laudo">Com laudo</option>
-                    <option value="sem_laudo">Sem laudo</option>
-                    <option value="pendente">Pendente de vinculo</option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="alertFilter">Alerta</label>
-                <select id="alertFilter">
-                    <option value="">Todos</option>
                 </select>
             </div>
             <div class="field">
@@ -101,6 +85,10 @@
                     <strong id="kpiPatients">0</strong>
                 </article>
                 <article class="kpi-card">
+                    <span>Laudos</span>
+                    <strong id="kpiReports">0</strong>
+                </article>
+                <article class="kpi-card">
                     <span>Mamografia</span>
                     <strong id="kpiMammo">0</strong>
                 </article>
@@ -113,12 +101,8 @@
                     <strong id="kpiUsgTv">0</strong>
                 </article>
                 <article class="kpi-card">
-                    <span>Sem laudo</span>
-                    <strong id="kpiSemLaudo">0</strong>
-                </article>
-                <article class="kpi-card alert">
-                    <span>Com alerta</span>
-                    <strong id="kpiAlertas">0</strong>
+                    <span>USGs</span>
+                    <strong id="kpiUsgTotal">0</strong>
                 </article>
             </section>
 
@@ -144,12 +128,11 @@
                                 <th>Nascimento / idade</th>
                                 <th>Procedimentos</th>
                                 <th>Laudos</th>
-                                <th>Alertas</th>
                                 <th>Ultima data</th>
                             </tr>
                         </thead>
                         <tbody id="patientRows">
-                            <tr><td colspan="9" class="empty-cell">Carregando.</td></tr>
+                            <tr><td colspan="8" class="empty-cell">Carregando.</td></tr>
                         </tbody>
                     </table>
                 </div>
