@@ -711,7 +711,7 @@ const MUNICIPAL_GESTOR_SEED = [
     { nome: 'Ana Flavia Pereira da Silva', cargo: 'Enfermeira reguladora', municipio: 'Morro do Chapeu', telefone: '75981757963', email: 'enfanaflavia3@gmail.com' },
     { nome: 'Francisleide ribeiro Barbosa', cargo: 'Reguladora', municipio: 'Umburanas', telefone: '74991485711', email: 'francisleideribeiro753@gmail.com' },
     { nome: 'Isabella Santos da Silva', cargo: 'Enfermeira - Apoiadora da APS', municipio: 'Mirangaba', telefone: '74991489450', email: 'ysinhass@hotmail.com' },
-    { nome: 'Agricia Benicio de Souza', cargo: 'Reguladora/Ass. Social', municipio: 'Umburanas', telefone: '74988228465', email: 'agriciabenicio@yahoo.com.br' },
+    { nome: 'Agricia Benicio de Souza', cargo: 'Reguladora/Ass. Social', municipio: 'Umburanas', login: 'umburanas.agricia', telefone: '74988228465', email: 'agriciabenicio@yahoo.com.br' },
     { nome: 'Deivison Rafael Santos Coelho', cargo: 'Coordenador de TI', municipio: 'Saude', telefone: '74988382729', email: 'Deivisonsaude@gmail.com' },
     { nome: 'Laysa da Silva Araujo', cargo: 'Coordenadora da Regulacao', municipio: 'Tapiramuta', telefone: '71996560404', email: 'laysaa950@gmail.com' },
     { nome: 'Maelly Lopes Nascimento', cargo: 'Reguladora', municipio: 'Piritiba', telefone: '74999914745', email: 'regulacao.piritiba@hotmail.com' },
@@ -720,7 +720,7 @@ const MUNICIPAL_GESTOR_SEED = [
     { nome: 'Quelma Saadia Menezes Goncalves Silva', cargo: 'Reguladora', municipio: 'Serrolandia', telefone: '74981281894', email: 'quelmasilva16@gmail.com' },
     { nome: 'GRAZIELLE ALVES PEREIRA', cargo: 'Encarregado de Unidade de Saude', municipio: 'Ourolandia', telefone: '74999496352', email: 'galves2604@gmail.com' },
     { nome: 'Clara Horrana Maia de Oliveira Rios', cargo: 'Coordenadora do NAGRC', municipio: 'Capim Grosso', telefone: '74991533163', email: 'clara_horrana@hotmail.com' },
-    { nome: 'Emiliane da Cunha Rios', cargo: 'Diretora de planejamento e regulacao', municipio: 'Jacobina', telefone: '74999959328', email: 'emilianecunharios2022@gmail.com' },
+    { nome: 'Emiliane da Cunha Rios', cargo: 'Diretora de planejamento e regulacao', municipio: 'Jacobina', login: 'jacobina.emiliane', telefone: '74999959328', email: 'emilianecunharios2022@gmail.com' },
     { nome: 'Geanjila dos Santos', cargo: 'Reguladora municipal', municipio: 'Caem', telefone: '74981421452', email: 'ge.araujoge@outlook.com' },
     { nome: 'Daniel de Oliveira Silva', cargo: 'Regulador administrador', municipio: 'Caldeirao Grande', telefone: '74981079231', email: 'daniell.silva1072k@gmail.com' },
     { nome: 'Luana Mendes Silva', cargo: 'Enfermeira reguladora, coordenadora NGC.', municipio: 'Mairi', telefone: '75983135054', email: 'luana_angico@hotmail.com' },
@@ -730,12 +730,12 @@ function digitsOnly(value) {
     return String(value || '').replace(/\D+/g, '');
 }
 
-function uniqueGestoresByMunicipio(rows) {
+function uniqueGestoresByLogin(rows) {
     const selected = [];
     const seen = new Map();
     const duplicates = [];
     for (const row of rows) {
-        const key = normalizeAccessText(row.municipio);
+        const key = normalizePortalLogin(row.login || row.municipio);
         if (seen.has(key)) {
             duplicates.push({ mantido: seen.get(key), ignorado: row });
             continue;
@@ -791,7 +791,7 @@ async function ensurePortalGestorSchema() {
 
 async function seedMunicipalGestores() {
     const client = await ociPool.connect();
-    const { selected, duplicates } = uniqueGestoresByMunicipio(MUNICIPAL_GESTOR_SEED);
+    const { selected, duplicates } = uniqueGestoresByLogin(MUNICIPAL_GESTOR_SEED);
     try {
         await client.query('BEGIN');
         await ensurePortalGestorSchema();
@@ -814,7 +814,7 @@ async function seedMunicipalGestores() {
                 createdMunicipios.push(municipioRow.nome);
             }
 
-            const login = normalizePortalLogin(gestor.municipio);
+            const login = normalizePortalLogin(gestor.login || gestor.municipio);
             const senha = digitsOnly(gestor.telefone);
             const nome = `${gestor.nome} - ${gestor.cargo}`;
             const result = await client.query(`
@@ -842,7 +842,7 @@ async function seedMunicipalGestores() {
             saved,
             createdMunicipios,
             duplicates: duplicates.map(item => ({
-                municipio: item.ignorado.municipio,
+                login: normalizePortalLogin(item.ignorado.login || item.ignorado.municipio),
                 mantido: item.mantido.nome,
                 ignorado: item.ignorado.nome,
             })),
