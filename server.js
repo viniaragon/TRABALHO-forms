@@ -189,7 +189,19 @@ function resolvePatientBankAccess(req) {
 
 function patientBankBaseSql() {
     return `
-        WITH base_laudos AS (
+        WITH patient_scope AS (
+            SELECT DISTINCT ON (p.id)
+                p.id AS paciente_id,
+                m.nome AS localidade,
+                a.regiao AS regiao_mae,
+                a.data_atendimento,
+                a.criado_em
+            FROM oci.pacientes p
+            JOIN oci.atendimentos a ON a.paciente_id = p.id
+            JOIN oci.municipios m ON m.id = a.municipio_id
+            ORDER BY p.id, a.data_atendimento DESC NULLS LAST, a.criado_em DESC NULLS LAST, a.atendimento_uid DESC
+        ),
+        base_laudos AS (
             SELECT
                 lp.id,
                 lp.paciente_id,
@@ -225,34 +237,15 @@ function patientBankBaseSql() {
                         THEN DATE_PART('year', AGE(CURRENT_DATE, COALESCE(p.data_nascimento, lp.data_nascimento)))::int
                     ELSE lp.idade_anos
                 END AS idade_calc,
-                CASE
-                    WHEN NULLIF(BTRIM(lp.municipio_paciente), '') IS NOT NULL
-                        AND LENGTH(BTRIM(lp.municipio_paciente)) <= 80
-                        AND lp.municipio_paciente !~* '(RESULTADO|PRONT|POWERED|MAMOGRAFIA| ID:| TIPO:)' THEN
-                        UPPER(TRANSLATE(BTRIM(lp.municipio_paciente), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
-                    WHEN lp.caminho_origem ILIKE '%Irece%' OR lp.caminho_origem ILIKE '%Irecê%' THEN 'IRECE'
-                    WHEN lp.caminho_origem ILIKE '%Jacobina%' THEN 'JACOBINA'
-                    WHEN lp.caminho_origem ILIKE '%Valen%' THEN 'VALENCA'
-                    ELSE 'NAO INFORMADA'
-                END AS localidade,
-                CASE
-                    WHEN COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date)
-                        BETWEEN DATE '2026-03-27' AND DATE '2026-04-30' THEN 'IRECE'
-                    WHEN COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date)
-                        BETWEEN DATE '2026-05-08' AND DATE '2026-06-05' THEN 'JACOBINA'
-                    WHEN COALESCE(lp.data_realizacao, lp.data_solicitacao, lp.criado_em::date)
-                        > DATE '2026-06-05' THEN 'EM ESPERA'
-                    ELSE 'FORA DO PERIODO'
-                END AS regiao_mae,
-                CASE
-                    WHEN lp.paciente_id IS NOT NULL THEN 'P:' || lp.paciente_id::text
-                    ELSE 'L:' || lp.nome_normalizado || ':' || COALESCE(lp.data_nascimento::text, lp.idade_anos::text, 'SEMIDADE')
-                END AS grupo_paciente
+                ps.localidade,
+                ps.regiao_mae,
+                'P:' || lp.paciente_id::text AS grupo_paciente
             FROM oci.laudos_pacientes lp
-            LEFT JOIN oci.pacientes p ON p.id = lp.paciente_id
+            JOIN oci.pacientes p ON p.id = lp.paciente_id
+            JOIN patient_scope ps ON ps.paciente_id = p.id
         ),
         -- Pacientes da planilha SEM NENHUM laudo vinculado entram como linhas
-        -- virtuais (origem_importacao = 'SEM_LAUDO'; 1 linha por atendimento,
+        -- virtuais (origem_importacao = 'SEM_LAUDO'; 1 linha por paciente,
         -- para os filtros de data/localidade funcionarem). Só aparecem quando
         -- o interruptor "sem laudo" está ligado.
         base_sem_laudo AS (
@@ -264,12 +257,12 @@ function patientBankBaseSql() {
                 p.patient_key AS nome_normalizado,
                 p.cns AS cartao_sus,
                 NULL::text AS telefone,
-                m.nome AS municipio_paciente,
+                ps.localidade AS municipio_paciente,
                 NULL::text AS tipo_laudo,
                 NULL::text AS numero_exame,
                 NULL::date AS data_solicitacao,
                 NULL::date AS data_realizacao,
-                a.data_atendimento AS data_laudo,
+                ps.data_atendimento AS data_laudo,
                 NULL::text AS arquivo_original,
                 NULL::text AS caminho_origem,
                 NULL::text AS caminho_armazenado,
@@ -278,7 +271,7 @@ function patientBankBaseSql() {
                 'sem_laudo' AS status_vinculo,
                 NULL::numeric AS confianca_vinculo,
                 NULL::text AS erro_extracao,
-                a.criado_em,
+                ps.criado_em,
                 NULL::text AS procedimento_raw,
                 p.data_nascimento,
                 NULL::text AS idade_texto,
@@ -290,12 +283,11 @@ function patientBankBaseSql() {
                     WHEN p.data_nascimento IS NOT NULL
                         THEN DATE_PART('year', AGE(CURRENT_DATE, p.data_nascimento))::int
                 END AS idade_calc,
-                m.nome AS localidade,
-                a.regiao AS regiao_mae,
+                ps.localidade,
+                ps.regiao_mae,
                 'P:' || p.id::text AS grupo_paciente
             FROM oci.pacientes p
-            JOIN oci.atendimentos a ON a.paciente_id = p.id
-            JOIN oci.municipios m ON m.id = a.municipio_id
+            JOIN patient_scope ps ON ps.paciente_id = p.id
             WHERE NOT EXISTS (
                 SELECT 1 FROM oci.laudos_pacientes l
                 WHERE l.paciente_id = p.id
@@ -378,18 +370,6 @@ function buildPatientBankWhere(req, access, startIndex = 1) {
         clauses.push(`origem_importacao IS DISTINCT FROM 'SEM_LAUDO'`);
     }
 
-    const status = String(req.query.status || '').trim().toLowerCase();
-    if (status === 'vinculado') {
-        clauses.push('paciente_id IS NOT NULL');
-    } else if (status === 'orfao') {
-        // todo laudo sem paciente (fila de revisão + não encontrados + ignorados)
-        clauses.push(`paciente_id IS NULL AND status_vinculo <> 'quarentena'`);
-    } else if (status === 'pendente') {
-        clauses.push(`status_vinculo IN ('pendente', 'pendente_revisao')`);
-    } else if (status === 'revisado') {
-        clauses.push(`status_vinculo IN ('revisado_manual', 'nao_encontrado', 'ignorado_revisao')`);
-    }
-
     const faixaIdade = String(req.query.faixaIdade || '').trim().toLowerCase();
     if (faixaIdade === '40mais') {
         clauses.push('idade_calc >= 40');
@@ -438,9 +418,7 @@ async function queryPatientBank(req, access) {
         grouped AS (
             SELECT
                 grupo_paciente,
-                COUNT(*)::int AS total_laudos,
-                BOOL_OR(paciente_id IS NOT NULL) AS tem_vinculo,
-                BOOL_OR(paciente_id IS NULL) AS tem_pendente
+                COUNT(*)::int AS total_laudos
             FROM filtered
             GROUP BY grupo_paciente
         )
@@ -448,7 +426,6 @@ async function queryPatientBank(req, access) {
             (SELECT COUNT(*)::int FROM grouped) AS total_pacientes,
             (SELECT COUNT(*)::int FROM filtered WHERE origem_importacao IS DISTINCT FROM 'SEM_LAUDO') AS total_laudos,
             (SELECT COUNT(*)::int FROM filtered WHERE paciente_id IS NOT NULL AND origem_importacao IS DISTINCT FROM 'SEM_LAUDO') AS pacientes_vinculados,
-            (SELECT COUNT(*)::int FROM filtered WHERE paciente_id IS NULL AND status_vinculo <> 'quarentena') AS pacientes_pendentes,
             (SELECT COUNT(*)::int FROM filtered WHERE tipo_laudo = 'MAMOGRAFIA') AS mamografias,
             (SELECT COUNT(*)::int FROM filtered WHERE tipo_laudo LIKE 'USG_%') AS usgs,
             (SELECT COUNT(DISTINCT grupo_paciente)::int FROM filtered WHERE tipo_laudo = 'MAMOGRAFIA') AS pac_com_mamografia,
@@ -581,7 +558,6 @@ async function queryPatientBank(req, access) {
             totalPacientes: Number(summary.total_pacientes || 0),
             totalLaudos: Number(summary.total_laudos || 0),
             pacientesVinculados: Number(summary.pacientes_vinculados || 0),
-            pacientesPendentes: Number(summary.pacientes_pendentes || 0),
             mamografias: Number(summary.mamografias || 0),
             usgs: Number(summary.usgs || 0),
             duplicadosLogicos: Number(summary.duplicados_logicos || 0),

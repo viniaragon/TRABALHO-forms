@@ -8,7 +8,6 @@ const filterTipo = document.getElementById('filterTipo');
 const filterLaudoModo = document.getElementById('filterLaudoModo');
 const laudoModoText = document.getElementById('laudoModoText');
 const filterIdade = document.getElementById('filterIdade');
-const filterStatus = document.getElementById('filterStatus');
 const filterDateFrom = document.getElementById('filterDateFrom');
 const filterDateTo = document.getElementById('filterDateTo');
 const filterSearch = document.getElementById('filterSearch');
@@ -33,7 +32,6 @@ const reviewIgnoreBtn = document.getElementById('reviewIgnoreBtn');
 const kpiPatients = document.getElementById('kpiPatients');
 const kpiReports = document.getElementById('kpiReports');
 const kpiLinked = document.getElementById('kpiLinked');
-const kpiPending = document.getElementById('kpiPending');
 const kpiMammo = document.getElementById('kpiMammo');
 const kpiUsg = document.getElementById('kpiUsg');
 const kpiPacMamografia = document.getElementById('kpiPacMamografia');
@@ -91,7 +89,6 @@ function buildParams() {
     if (filterLocalidade.value) params.set('localidade', filterLocalidade.value);
     if (filterTipo.value) params.set('tipo', filterTipo.value);
     if (filterLaudoModo.checked) params.set('laudoModo', 'sem');
-    if (filterStatus.value) params.set('status', filterStatus.value);
     if (filterIdade.value) params.set('faixaIdade', filterIdade.value);
     if (filterDateFrom.value) params.set('dateFrom', filterDateFrom.value);
     if (filterDateTo.value) params.set('dateTo', filterDateTo.value);
@@ -138,7 +135,6 @@ function updateKpis(kpis = {}) {
     kpiPatients.textContent = formatNumber(kpis.totalPacientes);
     kpiReports.textContent = formatNumber(kpis.totalLaudos);
     kpiLinked.textContent = formatNumber(kpis.pacientesVinculados);
-    kpiPending.textContent = formatNumber(kpis.pacientesPendentes);
     kpiMammo.textContent = formatNumber(kpis.mamografias);
     kpiUsg.textContent = formatNumber(kpis.usgs);
     kpiPacMamografia.textContent = formatNumber(kpis.pacComMamografia);
@@ -287,15 +283,6 @@ function patientStatus(row) {
     if (!Number(row.totalLaudos)) {
         return '<span class="status-pill pending">Sem laudo</span>';
     }
-    if (String(row.regioesMae || '').includes('EM ESPERA') && row.pendentes > 0) {
-        return '<span class="status-pill waiting">Em espera</span>';
-    }
-    if (row.pendentes > 0 && row.vinculados > 0) {
-        return '<span class="status-pill pending">Misto</span>';
-    }
-    if (row.pendentes > 0) {
-        return '<span class="status-pill pending">Pendente</span>';
-    }
     return '<span class="status-pill linked">Vinculado</span>';
 }
 
@@ -320,7 +307,7 @@ function renderRows() {
                 <td><button class="expand-btn" type="button">${isOpen ? '-' : '+'}</button></td>
                 <td>
                     <strong>${escapeHtml(row.paciente || '-')}</strong>
-                    <div class="doc-meta">${row.pacienteId ? `ID paciente ${escapeHtml(row.pacienteId)}` : 'Sem paciente_id automatico'}</div>
+                    <div class="doc-meta">ID paciente ${escapeHtml(row.pacienteId || '-')}</div>
                     ${row.cartaoSus ? `<div class="doc-meta">CNS ${escapeHtml(row.cartaoSus)}</div>` : ''}
                 </td>
                 <td>${escapeHtml(row.regioesMae || '-')}</td>
@@ -407,7 +394,7 @@ filterLaudoModo.addEventListener('change', () => {
     laudoModoText.textContent = filterLaudoModo.checked ? 'Sem laudo' : 'Com laudo';
 });
 
-[filterRegiaoMae, filterLocalidade, filterTipo, filterStatus, filterDateFrom, filterDateTo, filterLaudoModo, filterIdade].forEach(control => {
+[filterRegiaoMae, filterLocalidade, filterTipo, filterDateFrom, filterDateTo, filterLaudoModo, filterIdade].forEach(control => {
     control.addEventListener('change', () => {
         expandedRows.clear();
         fetchPatientBank();
