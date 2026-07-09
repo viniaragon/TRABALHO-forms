@@ -49,7 +49,7 @@ select {
     padding: 24px;
     background:
         linear-gradient(180deg, rgba(255,255,255,.82), rgba(243,246,248,.96)),
-        url("logo-especialistas.png") center 12% / 270px auto no-repeat;
+        url("logo-saude-da-mulher.jpeg") center 12% / 270px auto no-repeat;
 }
 
 .login-card {
