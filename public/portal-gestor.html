@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Municipal de Pacientes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="portal-gestor.css">
+</head>
+<body>
+    <section id="loginView" class="login-shell">
+        <form id="loginForm" class="login-card">
+            <img src="logo-especialistas.png" alt="Agora tem Especialistas" class="login-logo">
+            <h1>Portal Municipal de Pacientes</h1>
+            <p>Acesso restrito ao gestor municipal autorizado.</p>
+            <label for="loginInput">Login</label>
+            <input id="loginInput" name="login" type="text" autocomplete="username" required>
+            <label for="passwordInput">Senha</label>
+            <input id="passwordInput" name="senha" type="password" autocomplete="current-password" required>
+            <button id="loginButton" class="btn primary" type="submit">
+                <i class="fa-solid fa-right-to-bracket"></i>
+                Entrar
+            </button>
+            <div id="loginMessage" class="form-message hidden"></div>
+        </form>
+    </section>
+
+    <div id="portalView" class="portal-shell hidden">
+        <header class="portal-header">
+            <div class="brand-block">
+                <img src="logo-especialistas.png" alt="Agora tem Especialistas" class="brand-logo">
+                <div class="brand-mark">
+                    <i class="fa-solid fa-hospital-user"></i>
+                </div>
+                <div>
+                    <h1>Portal Municipal de Pacientes</h1>
+                    <p id="municipioLabel">Municipio autorizado</p>
+                </div>
+            </div>
+            <button id="logoutButton" class="btn secondary" type="button">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                Sair
+            </button>
+        </header>
+
+        <section class="filter-panel">
+            <div class="field search-field">
+                <label for="searchInput">Busca</label>
+                <div class="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="searchInput" type="search" placeholder="Nome, CPF, CNS, telefone ou procedimento">
+                </div>
+            </div>
+            <div class="field">
+                <label for="typeFilter">Tipo de laudo</label>
+                <select id="typeFilter">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="ageFilter">Idade</label>
+                <select id="ageFilter">
+                    <option value="">Todas</option>
+                    <option value="40mais">40 anos ou mais</option>
+                    <option value="menor40">Menos de 40 anos</option>
+                    <option value="desconhecida">Idade desconhecida</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="statusFilter">Status</label>
+                <select id="statusFilter">
+                    <option value="">Todos</option>
+                    <option value="com_laudo">Com laudo</option>
+                    <option value="sem_laudo">Sem laudo</option>
+                    <option value="pendente">Pendente de vinculo</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="alertFilter">Alerta</label>
+                <select id="alertFilter">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="dateFrom">De</label>
+                <input id="dateFrom" type="date">
+            </div>
+            <div class="field">
+                <label for="dateTo">Ate</label>
+                <input id="dateTo" type="date">
+            </div>
+        </section>
+
+        <main>
+            <section class="kpi-grid">
+                <article class="kpi-card">
+                    <span>Pacientes</span>
+                    <strong id="kpiPatients">0</strong>
+                </article>
+                <article class="kpi-card">
+                    <span>Mamografia</span>
+                    <strong id="kpiMammo">0</strong>
+                </article>
+                <article class="kpi-card">
+                    <span>USG mama</span>
+                    <strong id="kpiUsgMama">0</strong>
+                </article>
+                <article class="kpi-card">
+                    <span>USG TV</span>
+                    <strong id="kpiUsgTv">0</strong>
+                </article>
+                <article class="kpi-card">
+                    <span>Sem laudo</span>
+                    <strong id="kpiSemLaudo">0</strong>
+                </article>
+                <article class="kpi-card alert">
+                    <span>Com alerta</span>
+                    <strong id="kpiAlertas">0</strong>
+                </article>
+            </section>
+
+            <section class="patient-panel">
+                <div class="panel-head">
+                    <div>
+                        <h2>Pacientes do municipio</h2>
+                        <p id="resultSummary">Carregando registros autorizados.</p>
+                    </div>
+                    <button id="refreshButton" class="btn secondary" type="button">
+                        <i class="fa-solid fa-rotate"></i>
+                        Atualizar
+                    </button>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Paciente</th>
+                                <th>CPF / CNS</th>
+                                <th>Contato</th>
+                                <th>Nascimento / idade</th>
+                                <th>Procedimentos</th>
+                                <th>Laudos</th>
+                                <th>Alertas</th>
+                                <th>Ultima data</th>
+                            </tr>
+                        </thead>
+                        <tbody id="patientRows">
+                            <tr><td colspan="9" class="empty-cell">Carregando.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="portal-gestor.js"></script>
+</body>
+</html>

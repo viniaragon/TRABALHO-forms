@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const ExcelJS = require('exceljs');
 
@@ -98,6 +99,9 @@ const INTERNAL_PASSWORD = process.env.OCI_INTERNAL_PASSWORD || '123456789';
 const MASTER_PASSWORD = process.env.OCI_MASTER_PASSWORD || '987654321';
 const UNLINK_PASSWORD = process.env.OCI_UNLINK_PASSWORD || '010791';
 const PATIENT_BANK_MASTER_PASSWORD = process.env.PATIENT_BANK_MASTER_PASSWORD || MASTER_PASSWORD;
+const PORTAL_GESTOR_COOKIE = 'agsus_portal_session';
+const PORTAL_GESTOR_SESSION_HOURS = Number(process.env.PORTAL_GESTOR_SESSION_HOURS || 12);
+const PASSWORD_HASH_ITERATIONS = 310000;
 
 function normalizeAccessText(value) {
     return String(value || '')
@@ -636,6 +640,495 @@ function isInsideDirectory(baseDir, targetPath) {
 
 function isPatientBankMaster(access) {
     return access && access.level === 'master';
+}
+
+function parseCookies(req) {
+    return String(req.headers.cookie || '')
+        .split(';')
+        .map(item => item.trim())
+        .filter(Boolean)
+        .reduce((cookies, item) => {
+            const separator = item.indexOf('=');
+            if (separator === -1) return cookies;
+            const key = item.slice(0, separator).trim();
+            const value = item.slice(separator + 1).trim();
+            cookies[key] = decodeURIComponent(value);
+            return cookies;
+        }, {});
+}
+
+function sha256(value) {
+    return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function timingSafeEqualText(a, b) {
+    const left = Buffer.from(String(a || ''), 'utf8');
+    const right = Buffer.from(String(b || ''), 'utf8');
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function hashPortalPassword(password) {
+    const salt = crypto.randomBytes(16).toString('base64url');
+    const digest = crypto.pbkdf2Sync(String(password), salt, PASSWORD_HASH_ITERATIONS, 32, 'sha256').toString('base64url');
+    return `pbkdf2_sha256$${PASSWORD_HASH_ITERATIONS}$${salt}$${digest}`;
+}
+
+function verifyPortalPassword(password, storedHash) {
+    const [scheme, iterationsText, salt, digest] = String(storedHash || '').split('$');
+    const iterations = Number(iterationsText);
+    if (scheme !== 'pbkdf2_sha256' || !iterations || !salt || !digest) {
+        return false;
+    }
+    const candidate = crypto.pbkdf2Sync(String(password), salt, iterations, 32, 'sha256').toString('base64url');
+    return timingSafeEqualText(candidate, digest);
+}
+
+function portalCookieOptions(maxAgeSeconds) {
+    const parts = [
+        `${PORTAL_GESTOR_COOKIE}=`,
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+    ];
+    if (maxAgeSeconds === 0) {
+        parts[0] += '; Max-Age=0';
+    } else {
+        parts[0] += `%TOKEN%; Max-Age=${maxAgeSeconds}`;
+    }
+    if (process.env.NODE_ENV === 'production') {
+        parts.push('Secure');
+    }
+    return parts;
+}
+
+function setPortalSessionCookie(res, token) {
+    const maxAge = PORTAL_GESTOR_SESSION_HOURS * 60 * 60;
+    const header = portalCookieOptions(maxAge).join('; ').replace('%TOKEN%', encodeURIComponent(token));
+    res.setHeader('Set-Cookie', header);
+}
+
+function clearPortalSessionCookie(res) {
+    res.setHeader('Set-Cookie', portalCookieOptions(0).join('; '));
+}
+
+function normalizePortalLogin(login) {
+    return String(login || '').trim().toLowerCase();
+}
+
+async function ensurePortalGestorSchema() {
+    await ociPool.query(`
+        CREATE TABLE IF NOT EXISTS oci.portal_gestor_usuarios (
+            id bigserial PRIMARY KEY,
+            login text NOT NULL UNIQUE,
+            senha_hash text NOT NULL,
+            nome text NULL,
+            municipio_id bigint NOT NULL REFERENCES oci.municipios(id),
+            ativo boolean NOT NULL DEFAULT true,
+            ultimo_acesso timestamptz NULL,
+            criado_em timestamptz NOT NULL DEFAULT now(),
+            atualizado_em timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_portal_gestor_usuarios_municipio
+            ON oci.portal_gestor_usuarios (municipio_id);
+
+        CREATE TABLE IF NOT EXISTS oci.portal_gestor_sessoes (
+            id bigserial PRIMARY KEY,
+            usuario_id bigint NOT NULL REFERENCES oci.portal_gestor_usuarios(id) ON DELETE CASCADE,
+            token_hash text NOT NULL UNIQUE,
+            expires_at timestamptz NOT NULL,
+            criado_em timestamptz NOT NULL DEFAULT now(),
+            ultimo_uso timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_portal_gestor_sessoes_usuario
+            ON oci.portal_gestor_sessoes (usuario_id);
+        CREATE INDEX IF NOT EXISTS idx_portal_gestor_sessoes_expires
+            ON oci.portal_gestor_sessoes (expires_at);
+
+        CREATE TABLE IF NOT EXISTS oci.portal_gestor_auditoria (
+            id bigserial PRIMARY KEY,
+            usuario_id bigint NULL REFERENCES oci.portal_gestor_usuarios(id) ON DELETE SET NULL,
+            acao text NOT NULL,
+            detalhe text NULL,
+            ip text NULL,
+            user_agent text NULL,
+            criado_em timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_portal_gestor_auditoria_usuario
+            ON oci.portal_gestor_auditoria (usuario_id, criado_em DESC);
+    `);
+}
+
+async function auditPortalGestor(req, userId, acao, detalhe = null) {
+    try {
+        await ociPool.query(`
+            INSERT INTO oci.portal_gestor_auditoria (usuario_id, acao, detalhe, ip, user_agent)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [
+            userId || null,
+            acao,
+            detalhe,
+            req.ip || req.socket?.remoteAddress || null,
+            String(req.headers['user-agent'] || '').slice(0, 500) || null,
+        ]);
+    } catch (error) {
+        console.warn('Falha ao auditar portal gestor:', error.message);
+    }
+}
+
+function portalUserPayload(user) {
+    return {
+        id: Number(user.id),
+        login: user.login,
+        nome: user.nome || user.login,
+        municipioId: Number(user.municipio_id),
+        municipio: user.municipio,
+    };
+}
+
+async function getPortalGestorSession(req) {
+    const token = parseCookies(req)[PORTAL_GESTOR_COOKIE];
+    if (!token) return null;
+    const tokenHash = sha256(token);
+    const result = await ociPool.query(`
+        SELECT
+            s.id AS session_id,
+            u.id,
+            u.login,
+            u.nome,
+            u.municipio_id,
+            m.nome AS municipio
+        FROM oci.portal_gestor_sessoes s
+        JOIN oci.portal_gestor_usuarios u ON u.id = s.usuario_id
+        JOIN oci.municipios m ON m.id = u.municipio_id
+        WHERE s.token_hash = $1
+          AND s.expires_at > now()
+          AND u.ativo
+        LIMIT 1
+    `, [tokenHash]);
+    const user = result.rows[0] || null;
+    if (!user) return null;
+    await ociPool.query('UPDATE oci.portal_gestor_sessoes SET ultimo_uso = now() WHERE id = $1', [user.session_id]);
+    return { user: portalUserPayload(user), tokenHash, sessionId: Number(user.session_id) };
+}
+
+async function requirePortalGestor(req, res) {
+    const session = await getPortalGestorSession(req);
+    if (!session) {
+        res.status(401).json({ success: false, message: 'Sessao expirada ou acesso nao autorizado.' });
+        return null;
+    }
+    return session;
+}
+
+const PORTAL_MUNICIPIO_NORM_SQL = `
+    UPPER(TRANSLATE(BTRIM(m.nome), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
+`;
+
+const PORTAL_LAUDO_MUNICIPIO_NORM_SQL = `
+    CASE
+        WHEN NULLIF(BTRIM(lp.municipio_paciente), '') IS NOT NULL
+            AND LENGTH(BTRIM(lp.municipio_paciente)) <= 80
+            AND lp.municipio_paciente !~* '(RESULTADO|PRONT|POWERED|MAMOGRAFIA| ID:| TIPO:)'
+        THEN UPPER(TRANSLATE(BTRIM(lp.municipio_paciente), 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇáàâãäéèêëíìîïóòôõöúùûüç', 'AAAAAEEEEIIIIOOOOOUUUUCaaaaaeeeeiiiiooooouuuuc'))
+        ELSE NULL
+    END
+`;
+
+function portalGestorBaseSql() {
+    return `
+        WITH portal_municipio AS (
+            SELECT m.id, m.nome, ${PORTAL_MUNICIPIO_NORM_SQL} AS municipio_norm
+            FROM oci.municipios m
+            WHERE m.id = $1::bigint
+        ),
+        patients_scope AS (
+            SELECT
+                'P:' || p.id::text AS grupo,
+                p.id AS paciente_id,
+                p.nome_preferido AS paciente,
+                p.cpf,
+                p.cns,
+                p.data_nascimento,
+                CASE
+                    WHEN p.data_nascimento IS NOT NULL THEN DATE_PART('year', AGE(CURRENT_DATE, p.data_nascimento))::int
+                    ELSE NULL
+                END AS idade_paciente,
+                MIN(a.data_atendimento) AS primeira_data_atendimento,
+                MAX(a.data_atendimento) AS ultima_data_atendimento,
+                COALESCE(
+                    JSONB_AGG(DISTINCT JSONB_BUILD_OBJECT(
+                        'data', a.data_atendimento,
+                        'competencia', a.competencia,
+                        'regiao', a.regiao,
+                        'observacao', a.observacao
+                    )),
+                    '[]'::jsonb
+                ) AS atendimentos,
+                STRING_AGG(DISTINCT ap.procedimento, '; ' ORDER BY ap.procedimento)
+                    FILTER (WHERE ap.status = 'REALIZADO') AS procedimentos
+            FROM oci.pacientes p
+            JOIN oci.atendimentos a ON a.paciente_id = p.id
+            LEFT JOIN oci.atendimento_procedimentos ap ON ap.atendimento_uid = a.atendimento_uid
+            WHERE a.municipio_id = $1::bigint
+            GROUP BY p.id, p.nome_preferido, p.cpf, p.cns, p.data_nascimento
+        ),
+        laudos_norm AS (
+            SELECT
+                lp.*,
+                COALESCE(p.nome_preferido, lp.nome_extraido) AS paciente_resolvido,
+                p.cpf AS paciente_cpf,
+                p.cns AS paciente_cns,
+                p.data_nascimento AS paciente_nascimento,
+                ${PORTAL_LAUDO_MUNICIPIO_NORM_SQL} AS municipio_norm
+            FROM oci.laudos_pacientes lp
+            LEFT JOIN oci.pacientes p ON p.id = lp.paciente_id
+        ),
+        docs_scope AS (
+            SELECT
+                CASE
+                    WHEN ps.grupo IS NOT NULL THEN ps.grupo
+                    ELSE 'L:' || COALESCE(NULLIF(ln.nome_normalizado, ''), 'SEM_NOME') || ':' || COALESCE(ln.data_nascimento::text, ln.idade_anos::text, 'SEMIDADE')
+                END AS grupo,
+                ln.id,
+                ln.paciente_id,
+                ln.paciente_resolvido AS paciente,
+                ln.nome_extraido,
+                COALESCE(ln.paciente_cpf, NULL) AS cpf,
+                COALESCE(ln.paciente_cns, ln.cartao_sus) AS cns,
+                ln.telefone,
+                COALESCE(ln.paciente_nascimento, ln.data_nascimento) AS data_nascimento,
+                CASE
+                    WHEN COALESCE(ln.paciente_nascimento, ln.data_nascimento) IS NOT NULL
+                        THEN DATE_PART('year', AGE(CURRENT_DATE, COALESCE(ln.paciente_nascimento, ln.data_nascimento)))::int
+                    ELSE ln.idade_anos
+                END AS idade_calc,
+                ln.tipo_laudo,
+                ln.procedimento_raw,
+                COALESCE(ln.data_realizacao, ln.data_solicitacao, ln.criado_em::date) AS data_laudo,
+                ln.status_vinculo,
+                ln.arquivo_original,
+                ln.caminho_armazenado,
+                ln.vinculo_motivo
+            FROM laudos_norm ln
+            CROSS JOIN portal_municipio pm
+            LEFT JOIN patients_scope ps ON ps.paciente_id = ln.paciente_id
+            WHERE COALESCE(ln.registro_ativo, true)
+              AND ln.status_vinculo <> 'descartado'
+              AND (
+                ln.municipio_norm = pm.municipio_norm
+                OR (ln.municipio_norm IS NULL AND ps.paciente_id IS NOT NULL)
+              )
+        ),
+        grouped AS (
+            SELECT
+                COALESCE(ps.grupo, ds.grupo) AS grupo,
+                MIN(COALESCE(ps.paciente, ds.paciente, ds.nome_extraido)) AS paciente,
+                MIN(COALESCE(ps.cpf, ds.cpf)) AS cpf,
+                MIN(COALESCE(ps.cns, ds.cns)) AS cns,
+                MIN(ds.telefone) FILTER (WHERE ds.telefone IS NOT NULL AND ds.telefone <> '') AS telefone,
+                MIN(COALESCE(ps.data_nascimento, ds.data_nascimento)) AS data_nascimento,
+                MAX(COALESCE(ps.idade_paciente, ds.idade_calc)) AS idade_anos,
+                MIN(COALESCE(ps.primeira_data_atendimento, ds.data_laudo)) AS primeira_data,
+                MAX(COALESCE(ps.ultima_data_atendimento, ds.data_laudo)) AS ultima_data,
+                MAX(ps.procedimentos) AS procedimentos,
+                COALESCE((ARRAY_AGG(ps.atendimentos) FILTER (WHERE ps.atendimentos IS NOT NULL))[1], '[]'::jsonb) AS atendimentos,
+                COUNT(ds.id)::int AS total_laudos,
+                COUNT(ds.id) FILTER (WHERE ds.tipo_laudo = 'MAMOGRAFIA')::int AS mamografias,
+                COUNT(ds.id) FILTER (WHERE ds.tipo_laudo IN ('USG_MAMA', 'USG_MAMA_COMPLEMENTACAO'))::int AS usg_mama,
+                COUNT(ds.id) FILTER (WHERE ds.tipo_laudo IN ('USG_TRANSVAGINAL', 'USG_TRANSVAGINAL_PELVICA'))::int AS usg_transvaginal,
+                COUNT(ds.id) FILTER (WHERE ds.tipo_laudo LIKE 'USG_%')::int AS usgs,
+                COUNT(ds.id) FILTER (WHERE ds.status_vinculo IN ('pendente', 'pendente_revisao'))::int AS pendentes,
+                COALESCE(JSONB_AGG(
+                    JSONB_BUILD_OBJECT(
+                        'id', ds.id,
+                        'tipoLaudo', ds.tipo_laudo,
+                        'procedimento', ds.procedimento_raw,
+                        'data', ds.data_laudo,
+                        'statusVinculo', ds.status_vinculo,
+                        'arquivoOriginal', ds.arquivo_original,
+                        'temArquivoLocal', ds.caminho_armazenado IS NOT NULL AND ds.caminho_armazenado <> '',
+                        'motivo', ds.vinculo_motivo
+                    )
+                    ORDER BY ds.data_laudo DESC NULLS LAST, ds.id DESC
+                ) FILTER (WHERE ds.id IS NOT NULL), '[]'::jsonb) AS documentos
+            FROM patients_scope ps
+            FULL OUTER JOIN docs_scope ds ON ds.grupo = ps.grupo
+            GROUP BY COALESCE(ps.grupo, ds.grupo)
+        )
+    `;
+}
+
+function buildPortalAlerts(row) {
+    const idade = Number.isFinite(row.idadeAnos) ? row.idadeAnos : null;
+    const alerts = [];
+    if (idade === null) {
+        alerts.push({ key: 'idade_desconhecida', label: 'Idade desconhecida', level: 'neutral' });
+    }
+    if (!row.totalLaudos) {
+        alerts.push({ key: 'sem_laudo', label: 'Sem laudo disponivel', level: 'warning' });
+    }
+    if (idade !== null && idade >= 40 && !row.mamografias) {
+        alerts.push({ key: '40mais_sem_mamografia', label: '40+ sem mamografia', level: 'warning' });
+    }
+    if (idade !== null && idade >= 40 && !row.mamografias && row.usgMama > 0) {
+        alerts.push({ key: '40mais_apenas_usg_mama', label: '40+ apenas USG mama', level: 'info' });
+    }
+    if (idade !== null && idade < 40 && row.mamografias > 0) {
+        alerts.push({ key: 'menor40_com_mamografia', label: 'Menor de 40 com mamografia', level: 'warning' });
+    }
+    return alerts;
+}
+
+function portalRowMatchesFilters(row, filters) {
+    if (filters.search) {
+        const haystack = [
+            row.paciente,
+            row.cpf,
+            row.cns,
+            row.telefone,
+            row.procedimentos,
+            ...(row.documentos || []).flatMap(doc => [doc.tipoLaudo, doc.procedimento, doc.arquivoOriginal]),
+        ].join(' ').toLowerCase();
+        if (!haystack.includes(filters.search.toLowerCase())) return false;
+    }
+    if (filters.tipo && !(row.documentos || []).some(doc => doc.tipoLaudo === filters.tipo)) {
+        return false;
+    }
+    if (filters.status === 'com_laudo' && !row.totalLaudos) return false;
+    if (filters.status === 'sem_laudo' && row.totalLaudos) return false;
+    if (filters.status === 'pendente' && !row.pendentes) return false;
+    if (filters.faixaIdade === '40mais' && !(row.idadeAnos >= 40)) return false;
+    if (filters.faixaIdade === 'menor40' && !(row.idadeAnos < 40)) return false;
+    if (filters.faixaIdade === 'desconhecida' && row.idadeAnos !== null) return false;
+    if (filters.alerta && !(row.alertas || []).some(alert => alert.key === filters.alerta)) return false;
+    const dateFrom = filters.dateFrom ? new Date(`${filters.dateFrom}T00:00:00Z`) : null;
+    const dateTo = filters.dateTo ? new Date(`${filters.dateTo}T23:59:59Z`) : null;
+    if (dateFrom || dateTo) {
+        const first = row.primeiraData ? new Date(row.primeiraData) : null;
+        const last = row.ultimaData ? new Date(row.ultimaData) : null;
+        if (!first && !last) return false;
+        if (dateFrom && last && last < dateFrom) return false;
+        if (dateTo && first && first > dateTo) return false;
+    }
+    return true;
+}
+
+async function queryPortalGestorPacientes(req, user) {
+    const result = await ociPool.query(`${portalGestorBaseSql()} SELECT * FROM grouped ORDER BY ultima_data DESC NULLS LAST, paciente;`, [user.municipioId]);
+    const allRows = result.rows.map(row => {
+        const mapped = {
+            grupoPaciente: row.grupo,
+            paciente: row.paciente,
+            cpf: row.cpf,
+            cns: row.cns,
+            telefone: row.telefone,
+            dataNascimento: row.data_nascimento,
+            idadeAnos: row.idade_anos === null ? null : Number(row.idade_anos),
+            primeiraData: row.primeira_data,
+            ultimaData: row.ultima_data,
+            procedimentos: row.procedimentos || '',
+            atendimentos: row.atendimentos || [],
+            totalLaudos: Number(row.total_laudos || 0),
+            mamografias: Number(row.mamografias || 0),
+            usgMama: Number(row.usg_mama || 0),
+            usgTransvaginal: Number(row.usg_transvaginal || 0),
+            usgs: Number(row.usgs || 0),
+            pendentes: Number(row.pendentes || 0),
+            documentos: row.documentos || [],
+        };
+        mapped.alertas = buildPortalAlerts(mapped);
+        return mapped;
+    });
+
+    const filters = {
+        search: String(req.query.search || '').trim(),
+        tipo: String(req.query.tipo || '').trim().toUpperCase(),
+        status: String(req.query.status || '').trim().toLowerCase(),
+        faixaIdade: String(req.query.faixaIdade || '').trim().toLowerCase(),
+        alerta: String(req.query.alerta || '').trim().toLowerCase(),
+        dateFrom: String(req.query.dateFrom || '').trim(),
+        dateTo: String(req.query.dateTo || '').trim(),
+    };
+    const rows = allRows.filter(row => portalRowMatchesFilters(row, filters));
+    const tipos = [...new Set(allRows.flatMap(row => (row.documentos || []).map(doc => doc.tipoLaudo).filter(Boolean)))].sort();
+    const alertaOptions = [
+        { key: '40mais_sem_mamografia', label: '40+ sem mamografia' },
+        { key: '40mais_apenas_usg_mama', label: '40+ apenas USG mama' },
+        { key: 'menor40_com_mamografia', label: 'Menor de 40 com mamografia' },
+        { key: 'sem_laudo', label: 'Sem laudo disponivel' },
+        { key: 'idade_desconhecida', label: 'Idade desconhecida' },
+    ];
+    return {
+        user,
+        filters,
+        kpis: {
+            totalPacientes: rows.length,
+            comMamografia: rows.filter(row => row.mamografias > 0).length,
+            comUsgMama: rows.filter(row => row.usgMama > 0).length,
+            comUsgTransvaginal: rows.filter(row => row.usgTransvaginal > 0).length,
+            semLaudo: rows.filter(row => row.totalLaudos === 0).length,
+            comAlerta: rows.filter(row => row.alertas.length > 0).length,
+        },
+        options: { tipos, alertas: alertaOptions },
+        rows: rows.slice(0, 500),
+        totalRows: rows.length,
+    };
+}
+
+async function queryPortalGestorDocument(user, laudoId) {
+    const result = await ociPool.query(`
+        ${portalGestorBaseSql()},
+        docs AS (
+            SELECT doc.*
+            FROM grouped g
+            CROSS JOIN LATERAL jsonb_to_recordset(g.documentos) AS doc(
+                id bigint,
+                "tipoLaudo" text,
+                procedimento text,
+                data date,
+                "statusVinculo" text,
+                "arquivoOriginal" text,
+                "temArquivoLocal" boolean,
+                motivo text
+            )
+        )
+        SELECT lp.id, lp.arquivo_original, lp.caminho_armazenado, lp.storage_path
+        FROM docs d
+        JOIN oci.laudos_pacientes lp ON lp.id = d.id
+        WHERE lp.id = $2::bigint
+        LIMIT 1
+    `, [user.municipioId, laudoId]);
+    return result.rows[0] || null;
+}
+
+async function sendScopedLaudoPdf(res, document) {
+    const storageRoot = path.resolve(__dirname, 'storage');
+    const filePath = path.resolve(document.caminho_armazenado || '');
+    const localOk = document.caminho_armazenado
+        && isInsideDirectory(storageRoot, filePath)
+        && path.extname(filePath).toLowerCase() === '.pdf'
+        && fs.existsSync(filePath);
+
+    if (!localOk) {
+        const storagePath = document.storage_path;
+        if (storagePath && isFirebaseConfigured && admin) {
+            const bucketName = process.env.FIREBASE_STORAGE_BUCKET || 'vortexaiecolink.firebasestorage.app';
+            const [signedUrl] = await admin.storage().bucket(bucketName).file(storagePath).getSignedUrl({
+                action: 'read',
+                expires: Date.now() + 15 * 60 * 1000,
+            });
+            return res.redirect(signedUrl);
+        }
+        return res.status(404).json({ success: false, message: 'Arquivo PDF nao disponivel.' });
+    }
+
+    return res.sendFile(filePath, {
+        headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="${path.basename(document.arquivo_original || filePath).replace(/"/g, '')}"`,
+            'X-Content-Type-Options': 'nosniff',
+        },
+    });
 }
 
 async function ensureLaudoReviewTable() {
@@ -1589,6 +2082,107 @@ app.get('/api/pacientes-banco', async (req, res) => {
     }
 });
 
+app.post('/api/portal-gestor/login', async (req, res) => {
+    try {
+        await ensurePortalGestorSchema();
+        const login = normalizePortalLogin(req.body?.login);
+        const senha = String(req.body?.senha || '');
+        if (!login || !senha) {
+            return res.status(400).json({ success: false, message: 'Informe login e senha.' });
+        }
+        const result = await ociPool.query(`
+            SELECT u.id, u.login, u.senha_hash, u.nome, u.municipio_id, u.ativo, m.nome AS municipio
+            FROM oci.portal_gestor_usuarios u
+            JOIN oci.municipios m ON m.id = u.municipio_id
+            WHERE lower(u.login) = lower($1)
+            LIMIT 1
+        `, [login]);
+        const user = result.rows[0] || null;
+        if (!user || !verifyPortalPassword(senha, user.senha_hash)) {
+            await auditPortalGestor(req, user?.id || null, 'login_falhou', login);
+            return res.status(401).json({ success: false, message: 'Login ou senha invalidos.' });
+        }
+        if (!user.ativo) {
+            await auditPortalGestor(req, user.id, 'login_inativo', login);
+            return res.status(403).json({ success: false, message: 'Usuario inativo.' });
+        }
+        const token = crypto.randomBytes(32).toString('base64url');
+        const tokenHash = sha256(token);
+        await ociPool.query(`
+            INSERT INTO oci.portal_gestor_sessoes (usuario_id, token_hash, expires_at)
+            VALUES ($1, $2, now() + ($3::int * interval '1 hour'))
+        `, [user.id, tokenHash, PORTAL_GESTOR_SESSION_HOURS]);
+        await ociPool.query('UPDATE oci.portal_gestor_usuarios SET ultimo_acesso = now(), atualizado_em = now() WHERE id = $1', [user.id]);
+        await auditPortalGestor(req, user.id, 'login_ok', user.municipio);
+        setPortalSessionCookie(res, token);
+        res.json({ success: true, data: { user: portalUserPayload(user) } });
+    } catch (error) {
+        console.error('Erro no login do Portal Gestor:', error);
+        res.status(500).json({ success: false, message: 'Erro ao autenticar gestor.' });
+    }
+});
+
+app.post('/api/portal-gestor/logout', async (req, res) => {
+    try {
+        const session = await getPortalGestorSession(req);
+        if (session) {
+            await ociPool.query('DELETE FROM oci.portal_gestor_sessoes WHERE id = $1', [session.sessionId]);
+            await auditPortalGestor(req, session.user.id, 'logout', session.user.municipio);
+        }
+        clearPortalSessionCookie(res);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Erro no logout do Portal Gestor:', error);
+        clearPortalSessionCookie(res);
+        res.status(500).json({ success: false, message: 'Erro ao encerrar sessao.' });
+    }
+});
+
+app.get('/api/portal-gestor/me', async (req, res) => {
+    try {
+        const session = await requirePortalGestor(req, res);
+        if (!session) return;
+        res.json({ success: true, data: { user: session.user } });
+    } catch (error) {
+        console.error('Erro ao consultar sessao do Portal Gestor:', error);
+        res.status(500).json({ success: false, message: 'Erro ao consultar sessao.' });
+    }
+});
+
+app.get('/api/portal-gestor/pacientes', async (req, res) => {
+    try {
+        const session = await requirePortalGestor(req, res);
+        if (!session) return;
+        const data = await queryPortalGestorPacientes(req, session.user);
+        await auditPortalGestor(req, session.user.id, 'listar_pacientes', `total=${data.totalRows}`);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Erro ao carregar Portal Gestor:', error);
+        res.status(500).json({ success: false, message: 'Erro ao carregar pacientes do municipio.' });
+    }
+});
+
+app.get('/api/portal-gestor/laudos/:id/pdf', async (req, res) => {
+    try {
+        const session = await requirePortalGestor(req, res);
+        if (!session) return;
+        const laudoId = Number(req.params.id);
+        if (!Number.isInteger(laudoId) || laudoId <= 0) {
+            return res.status(400).json({ success: false, message: 'ID de laudo invalido.' });
+        }
+        const document = await queryPortalGestorDocument(session.user, laudoId);
+        if (!document) {
+            await auditPortalGestor(req, session.user.id, 'pdf_negado', `laudo=${laudoId}`);
+            return res.status(404).json({ success: false, message: 'Laudo nao encontrado neste municipio.' });
+        }
+        await auditPortalGestor(req, session.user.id, 'abrir_pdf', `laudo=${laudoId}`);
+        return sendScopedLaudoPdf(res, document);
+    } catch (error) {
+        console.error('Erro ao abrir PDF do Portal Gestor:', error);
+        res.status(500).json({ success: false, message: 'Erro ao abrir PDF do laudo.' });
+    }
+});
+
 app.get('/api/pacientes-banco/laudos/:id/pdf', async (req, res) => {
     try {
         const access = resolvePatientBankAccess(req);
@@ -1970,6 +2564,9 @@ async function migrateIfNeeded() {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
     console.log(`Servidor rodando na porta ${PORT}`);
+    await ensurePortalGestorSchema().catch(error => {
+        console.warn('Portal Gestor nao inicializado:', error.message);
+    });
     // Tenta migrar os dados locais se o Firebase estiver configurado
     await migrateIfNeeded();
 });
