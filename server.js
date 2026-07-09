@@ -729,6 +729,47 @@ function normalizePortalLogin(login) {
         .replace(/^\.+|\.+$/g, '');
 }
 
+const MUNICIPAL_GESTOR_SEED = [
+    { nome: 'Rizia', cargo: 'Coordenadora da Regulacao', municipio: 'Jacobina', telefone: '74988031715', email: 'riziamarques784@gmail.com' },
+    { nome: 'Lutero Nunes Ramos', cargo: 'Regulador', municipio: 'Quixabeira', telefone: '74981322533', email: 'lutero.ramos@gmail.com' },
+    { nome: 'Ana Flavia Pereira da Silva', cargo: 'Enfermeira reguladora', municipio: 'Morro do Chapeu', telefone: '75981757963', email: 'enfanaflavia3@gmail.com' },
+    { nome: 'Francisleide ribeiro Barbosa', cargo: 'Reguladora', municipio: 'Umburanas', telefone: '74991485711', email: 'francisleideribeiro753@gmail.com' },
+    { nome: 'Isabella Santos da Silva', cargo: 'Enfermeira - Apoiadora da APS', municipio: 'Mirangaba', telefone: '74991489450', email: 'ysinhass@hotmail.com' },
+    { nome: 'Agricia Benicio de Souza', cargo: 'Reguladora/Ass. Social', municipio: 'Umburanas', telefone: '74988228465', email: 'agriciabenicio@yahoo.com.br' },
+    { nome: 'Deivison Rafael Santos Coelho', cargo: 'Coordenador de TI', municipio: 'Saude', telefone: '74988382729', email: 'Deivisonsaude@gmail.com' },
+    { nome: 'Laysa da Silva Araujo', cargo: 'Coordenadora da Regulacao', municipio: 'Tapiramuta', telefone: '71996560404', email: 'laysaa950@gmail.com' },
+    { nome: 'Maelly Lopes Nascimento', cargo: 'Reguladora', municipio: 'Piritiba', telefone: '74999914745', email: 'regulacao.piritiba@hotmail.com' },
+    { nome: 'Marcelo Pereira dos Santos', cargo: 'Coordenador da Central de Regulacao', municipio: 'Miguel Calmon', telefone: '7499947170', email: 'coordenasemasa@gmail.com' },
+    { nome: 'Marcos Silva Oliveira', cargo: 'Coordenador da regulacao Municipal', municipio: 'Sao Jose do Jacuipe', telefone: '74998042012', email: 'marcissilva14@hotmail.com' },
+    { nome: 'Quelma Saadia Menezes Goncalves Silva', cargo: 'Reguladora', municipio: 'Serrolandia', telefone: '74981281894', email: 'quelmasilva16@gmail.com' },
+    { nome: 'GRAZIELLE ALVES PEREIRA', cargo: 'Encarregado de Unidade de Saude', municipio: 'Ourolandia', telefone: '74999496352', email: 'galves2604@gmail.com' },
+    { nome: 'Clara Horrana Maia de Oliveira Rios', cargo: 'Coordenadora do NAGRC', municipio: 'Capim Grosso', telefone: '74991533163', email: 'clara_horrana@hotmail.com' },
+    { nome: 'Emiliane da Cunha Rios', cargo: 'Diretora de planejamento e regulacao', municipio: 'Jacobina', telefone: '74999959328', email: 'emilianecunharios2022@gmail.com' },
+    { nome: 'Geanjila dos Santos', cargo: 'Reguladora municipal', municipio: 'Caem', telefone: '74981421452', email: 'ge.araujoge@outlook.com' },
+    { nome: 'Daniel de Oliveira Silva', cargo: 'Regulador administrador', municipio: 'Caldeirao Grande', telefone: '74981079231', email: 'daniell.silva1072k@gmail.com' },
+    { nome: 'Luana Mendes Silva', cargo: 'Enfermeira reguladora, coordenadora NGC.', municipio: 'Mairi', telefone: '75983135054', email: 'luana_angico@hotmail.com' },
+];
+
+function digitsOnly(value) {
+    return String(value || '').replace(/\D+/g, '');
+}
+
+function uniqueGestoresByMunicipio(rows) {
+    const selected = [];
+    const seen = new Map();
+    const duplicates = [];
+    for (const row of rows) {
+        const key = normalizeAccessText(row.municipio);
+        if (seen.has(key)) {
+            duplicates.push({ mantido: seen.get(key), ignorado: row });
+            continue;
+        }
+        seen.set(key, row);
+        selected.push(row);
+    }
+    return { selected, duplicates };
+}
+
 async function ensurePortalGestorSchema() {
     await ociPool.query(`
         CREATE TABLE IF NOT EXISTS oci.portal_gestor_usuarios (
@@ -770,6 +811,72 @@ async function ensurePortalGestorSchema() {
         CREATE INDEX IF NOT EXISTS idx_portal_gestor_auditoria_usuario
             ON oci.portal_gestor_auditoria (usuario_id, criado_em DESC);
     `);
+}
+
+async function seedMunicipalGestores() {
+    const client = await ociPool.connect();
+    const { selected, duplicates } = uniqueGestoresByMunicipio(MUNICIPAL_GESTOR_SEED);
+    try {
+        await client.query('BEGIN');
+        await ensurePortalGestorSchema();
+        const municipios = await client.query('SELECT id, nome FROM oci.municipios');
+        const municipioCache = new Map(municipios.rows.map(row => [normalizeAccessText(row.nome), row]));
+        const createdMunicipios = [];
+        const saved = [];
+
+        for (const gestor of selected) {
+            let municipioRow = municipioCache.get(normalizeAccessText(gestor.municipio));
+            if (!municipioRow) {
+                const created = await client.query(`
+                    INSERT INTO oci.municipios (nome)
+                    VALUES ($1)
+                    ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome
+                    RETURNING id, nome
+                `, [gestor.municipio]);
+                municipioRow = created.rows[0];
+                municipioCache.set(normalizeAccessText(municipioRow.nome), municipioRow);
+                createdMunicipios.push(municipioRow.nome);
+            }
+
+            const login = normalizePortalLogin(gestor.municipio);
+            const senha = digitsOnly(gestor.telefone);
+            const nome = `${gestor.nome} - ${gestor.cargo}`;
+            const result = await client.query(`
+                INSERT INTO oci.portal_gestor_usuarios (login, senha_hash, nome, municipio_id, ativo)
+                VALUES ($1, $2, $3, $4, true)
+                ON CONFLICT (login) DO UPDATE SET
+                    senha_hash = EXCLUDED.senha_hash,
+                    nome = EXCLUDED.nome,
+                    municipio_id = EXCLUDED.municipio_id,
+                    ativo = true,
+                    atualizado_em = now()
+                RETURNING id, login
+            `, [login, hashPortalPassword(senha), nome, municipioRow.id]);
+            saved.push({
+                id: Number(result.rows[0].id),
+                login,
+                senha,
+                municipio: municipioRow.nome,
+                nome: gestor.nome,
+            });
+        }
+
+        await client.query('COMMIT');
+        return {
+            saved,
+            createdMunicipios,
+            duplicates: duplicates.map(item => ({
+                municipio: item.ignorado.municipio,
+                mantido: item.mantido.nome,
+                ignorado: item.ignorado.nome,
+            })),
+        };
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+    } finally {
+        client.release();
+    }
 }
 
 async function auditPortalGestor(req, userId, acao, detalhe = null) {
@@ -2160,6 +2267,21 @@ app.get('/api/portal-gestor/me', async (req, res) => {
     } catch (error) {
         console.error('Erro ao consultar sessao do Portal Gestor:', error);
         res.status(500).json({ success: false, message: 'Erro ao consultar sessao.' });
+    }
+});
+
+app.post('/api/portal-gestor/admin/seed-municipios', async (req, res) => {
+    try {
+        const accessKey = String(req.query.accessKey || req.body?.accessKey || '').trim();
+        if (!accessKey || accessKey !== PATIENT_BANK_MASTER_PASSWORD) {
+            return res.status(403).json({ success: false, message: 'Senha master invalida.' });
+        }
+        const data = await seedMunicipalGestores();
+        await auditPortalGestor(req, null, 'seed_gestores_municipais', `total=${data.saved.length}`);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('Erro ao semear gestores municipais:', error);
+        res.status(500).json({ success: false, message: error.message || 'Erro ao criar gestores municipais.' });
     }
 });
 
