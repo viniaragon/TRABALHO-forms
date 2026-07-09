@@ -9,6 +9,8 @@
 - Auditoria simples em `oci.portal_gestor_auditoria`.
 - Script manual para criar/atualizar gestor municipal:
   - `node scripts/criar-gestor-municipal.mjs --login gestor.irece --senha "senha-forte" --municipio "IRECE" --nome "Gestor Irece"`
+- Script em lote para os gestores da primeira lista:
+  - `node scripts/criar-gestores-municipais-lote.mjs`
 - Listagem restrita ao municipio exato do usuario.
 - Busca por nome, CPF, CNS, telefone, procedimento e metadados dos laudos.
 - Filtros por tipo de laudo, idade, status, alerta e periodo.
@@ -62,4 +64,3 @@
 - Log detalhado de abertura de PDF por paciente/laudo.
 - Paginação server-side caso algum municipio ultrapasse milhares de registros.
 - Politica de mascaramento configuravel para CPF/CNS se a governanca LGPD exigir.
-
