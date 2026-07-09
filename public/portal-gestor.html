@@ -13,7 +13,7 @@
 <body>
     <section id="loginView" class="login-shell">
         <form id="loginForm" class="login-card">
-            <img src="logo-saude-da-mulher.jpeg" alt="SUS Ministério da Saúde" class="login-logo">
+            <img src="logo-saude-da-mulher.jpeg" alt="Saúde da Mulher" class="login-logo">
             <h1>Portal Municipal de Pacientes</h1>
             <p>Acesso restrito ao gestor municipal autorizado.</p>
             <label for="loginInput">Login</label>
@@ -24,20 +24,17 @@
                 <i class="fa-solid fa-right-to-bracket"></i>
                 Entrar
             </button>
-            <div id="loginMessage" class="form-message hidden"></div>
+            <div id="loginMessage" class="form-message hidden" role="alert" aria-live="polite"></div>
         </form>
     </section>
 
     <div id="portalView" class="portal-shell hidden">
         <header class="portal-header">
             <div class="brand-block">
-                <img src="logo-saude-da-mulher.jpeg" alt="SUS Ministério da Saúde" class="brand-logo">
-                <div class="brand-mark">
-                    <i class="fa-solid fa-hospital-user"></i>
-                </div>
+                <img src="logo-saude-da-mulher.jpeg" alt="Saúde da Mulher" class="brand-logo">
                 <div>
                     <h1>Portal Municipal de Pacientes</h1>
-                    <p id="municipioLabel">Municipio autorizado</p>
+                    <p id="municipioLabel">Município autorizado</p>
                 </div>
             </div>
             <button id="logoutButton" class="btn secondary" type="button">
@@ -73,15 +70,21 @@
                 <input id="dateFrom" type="date">
             </div>
             <div class="field">
-                <label for="dateTo">Ate</label>
+                <label for="dateTo">Até</label>
                 <input id="dateTo" type="date">
+            </div>
+            <div class="filter-actions">
+                <button id="clearFiltersButton" class="btn secondary" type="button">
+                    <i class="fa-solid fa-filter-circle-xmark"></i>
+                    Limpar filtros
+                </button>
             </div>
         </section>
 
         <main>
             <section class="kpi-grid">
                 <article class="kpi-card">
-                    <span>Pacientes</span>
+                    <span>Pacientes com laudo</span>
                     <strong id="kpiPatients">0</strong>
                 </article>
                 <article class="kpi-card">
@@ -100,16 +103,12 @@
                     <span>USG TV</span>
                     <strong id="kpiUsgTv">0</strong>
                 </article>
-                <article class="kpi-card">
-                    <span>USGs</span>
-                    <strong id="kpiUsgTotal">0</strong>
-                </article>
             </section>
 
             <section class="patient-panel">
                 <div class="panel-head">
                     <div>
-                        <h2>Pacientes do municipio</h2>
+                        <h2>Pacientes com laudo do município</h2>
                         <p id="resultSummary">Carregando registros autorizados.</p>
                     </div>
                     <button id="refreshButton" class="btn secondary" type="button">
@@ -121,18 +120,15 @@
                     <table>
                         <thead>
                             <tr>
-                                <th></th>
                                 <th>Paciente</th>
-                                <th>CPF / CNS</th>
-                                <th>Contato</th>
                                 <th>Nascimento / idade</th>
-                                <th>Procedimentos</th>
-                                <th>Laudos</th>
-                                <th>Ultima data</th>
+                                <th>Laudos disponíveis</th>
+                                <th>Última data</th>
+                                <th class="action-column">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="patientRows">
-                            <tr><td colspan="8" class="empty-cell">Carregando.</td></tr>
+                            <tr><td colspan="5" class="empty-cell">Carregando.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -140,7 +136,23 @@
         </main>
     </div>
 
-    <div id="toast" class="toast hidden"></div>
+    <div id="patientDrawer" class="drawer-shell hidden" aria-hidden="true">
+        <button id="drawerBackdrop" class="drawer-backdrop" type="button" aria-label="Fechar detalhes"></button>
+        <aside class="patient-drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+            <header class="drawer-head">
+                <div>
+                    <span class="drawer-eyebrow">Paciente</span>
+                    <h2 id="drawerTitle">Detalhes da paciente</h2>
+                </div>
+                <button id="closeDrawerButton" class="icon-button" type="button" aria-label="Fechar detalhes" title="Fechar">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </header>
+            <div id="drawerContent" class="drawer-content"></div>
+        </aside>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <script src="portal-gestor.js"></script>
 </body>
 </html>

@@ -12,22 +12,35 @@ const typeFilter = document.getElementById('typeFilter');
 const ageFilter = document.getElementById('ageFilter');
 const dateFrom = document.getElementById('dateFrom');
 const dateTo = document.getElementById('dateTo');
+const clearFiltersButton = document.getElementById('clearFiltersButton');
 const refreshButton = document.getElementById('refreshButton');
 const patientRows = document.getElementById('patientRows');
 const resultSummary = document.getElementById('resultSummary');
 const toast = document.getElementById('toast');
+const patientDrawer = document.getElementById('patientDrawer');
+const drawerBackdrop = document.getElementById('drawerBackdrop');
+const closeDrawerButton = document.getElementById('closeDrawerButton');
+const drawerTitle = document.getElementById('drawerTitle');
+const drawerContent = document.getElementById('drawerContent');
 
 const kpiPatients = document.getElementById('kpiPatients');
 const kpiReports = document.getElementById('kpiReports');
 const kpiMammo = document.getElementById('kpiMammo');
 const kpiUsgMama = document.getElementById('kpiUsgMama');
 const kpiUsgTv = document.getElementById('kpiUsgTv');
-const kpiUsgTotal = document.getElementById('kpiUsgTotal');
 
 let currentUser = null;
 let currentRows = [];
 let searchTimer = null;
-const expandedRows = new Set();
+let lastDrawerTrigger = null;
+
+const REPORT_TYPE_LABELS = {
+    MAMOGRAFIA: 'Mamografia',
+    USG_MAMA: 'USG de mama',
+    USG_MAMA_COMPLEMENTACAO: 'USG de mama complementar',
+    USG_PELVICA: 'USG pélvica',
+    USG_TRANSVAGINAL: 'USG transvaginal',
+};
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -49,6 +62,20 @@ function formatDate(value) {
     return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
+function formatReportType(value) {
+    const key = String(value || '').trim().toUpperCase();
+    if (!key) return 'Laudo';
+    return REPORT_TYPE_LABELS[key] || key
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replace(/^./, character => character.toUpperCase());
+}
+
+function displayValue(value) {
+    const text = String(value || '').trim();
+    return text && text !== '-' ? text : 'Não informado';
+}
+
 function showToast(message, type = 'success') {
     toast.textContent = message;
     toast.className = `toast ${type}`;
@@ -58,6 +85,7 @@ function showToast(message, type = 'success') {
 }
 
 function showLogin(message = '') {
+    closePatientDrawer(false);
     currentUser = null;
     portalView.classList.add('hidden');
     loginView.classList.remove('hidden');
@@ -128,13 +156,13 @@ async function loadPatients() {
     try {
         const data = await apiFetch(`/api/portal-gestor/pacientes?${buildParams().toString()}`);
         currentRows = data.rows || [];
-        renderSelectOptions(typeFilter, data.options.tipos || [], item => item, item => item);
+        renderSelectOptions(typeFilter, data.options.tipos || [], item => item, formatReportType);
         renderKpis(data.kpis || {});
         renderRows();
         const trunc = data.totalRows > currentRows.length
             ? ` Mostrando os primeiros ${formatNumber(currentRows.length)}.`
             : '';
-        resultSummary.textContent = `${formatNumber(data.totalRows)} pacientes no filtro atual.${trunc}`;
+        resultSummary.textContent = `${formatNumber(data.totalRows)} pacientes com laudo no filtro atual.${trunc}`;
     } catch (error) {
         if (error.status === 401) {
             showLogin('Sessao expirada. Entre novamente.');
@@ -152,17 +180,14 @@ function renderKpis(kpis) {
     kpiMammo.textContent = formatNumber(kpis.comMamografia);
     kpiUsgMama.textContent = formatNumber(kpis.comUsgMama);
     kpiUsgTv.textContent = formatNumber(kpis.comUsgTransvaginal);
-    kpiUsgTotal.textContent = formatNumber(kpis.totalUsgs);
 }
 
 function renderRows() {
     if (!currentRows.length) {
-        patientRows.innerHTML = '<tr><td colspan="8" class="empty-cell">Nenhum paciente encontrado para os filtros atuais.</td></tr>';
+        patientRows.innerHTML = '<tr><td colspan="5" class="empty-cell">Nenhum paciente com laudo encontrado para os filtros atuais.</td></tr>';
         return;
     }
     patientRows.innerHTML = currentRows.map((row, index) => {
-        const key = row.grupoPaciente || String(index);
-        const isOpen = expandedRows.has(key);
         const age = row.dataNascimento
             ? `${formatDate(row.dataNascimento)}${row.idadeAnos !== null ? ` / ${row.idadeAnos} anos` : ''}`
             : (row.idadeAnos !== null ? `${row.idadeAnos} anos` : '-');
@@ -171,24 +196,22 @@ function renderRows() {
             row.usgMama ? `<span class="pill">USG mama ${formatNumber(row.usgMama)}</span>` : '',
             row.usgTransvaginal ? `<span class="pill">USG TV ${formatNumber(row.usgTransvaginal)}</span>` : '',
         ].join('');
+        const reportLabel = row.totalLaudos === 1 ? 'Ver 1 laudo' : `Ver ${formatNumber(row.totalLaudos)} laudos`;
         return `
-            <tr class="patient-row" data-key="${escapeHtml(key)}">
-                <td><button class="expand-btn" type="button">${isOpen ? '-' : '+'}</button></td>
-                <td>
-                    <strong>${escapeHtml(row.paciente || '-')}</strong>
-                    <div class="meta">${escapeHtml(row.grupoPaciente || '')}</div>
+            <tr class="patient-row">
+                <td data-label="Paciente"><strong class="patient-name">${escapeHtml(row.paciente || 'Não informado')}</strong></td>
+                <td data-label="Nascimento / idade">${escapeHtml(age)}</td>
+                <td data-label="Laudos disponíveis">
+                    <div class="report-summary"><strong>${formatNumber(row.totalLaudos)}</strong>${laudos}</div>
                 </td>
-                <td>
-                    <div>${row.cpf ? `CPF ${escapeHtml(row.cpf)}` : 'CPF -'}</div>
-                    <div class="meta">${row.cns ? `CNS ${escapeHtml(row.cns)}` : 'CNS -'}</div>
+                <td data-label="Última data">${formatDate(row.ultimaData)}</td>
+                <td class="action-cell" data-label="Ação">
+                    <button class="btn secondary view-reports-btn" type="button" data-row-index="${index}" aria-label="${escapeHtml(reportLabel)} de ${escapeHtml(row.paciente || 'paciente')}">
+                        <i class="fa-solid fa-file-medical"></i>
+                        ${escapeHtml(reportLabel)}
+                    </button>
                 </td>
-                <td>${escapeHtml(row.telefone || '-')}</td>
-                <td>${escapeHtml(age)}</td>
-                <td>${escapeHtml(row.procedimentos || '-')}</td>
-                <td><strong>${formatNumber(row.totalLaudos)}</strong><div>${laudos || '-'}</div></td>
-                <td>${formatDate(row.ultimaData)}</td>
             </tr>
-            ${isOpen ? renderDetails(row) : ''}
         `;
     }).join('');
 }
@@ -209,12 +232,10 @@ function renderDetails(row) {
             return `
                 <div class="document-item">
                     <div>
-                        <strong>${escapeHtml(doc.tipoLaudo || '-')}</strong>
-                        <div class="meta">Laudo #${escapeHtml(doc.id)}</div>
+                        <strong>${escapeHtml(formatReportType(doc.tipoLaudo))}</strong>
                     </div>
                     <div>
-                        ${escapeHtml(doc.procedimento || doc.arquivoOriginal || '-')}
-                        <div class="meta">${escapeHtml(doc.arquivoOriginal || '')}</div>
+                        ${escapeHtml(doc.procedimento || 'Procedimento não informado')}
                     </div>
                     <div>${formatDate(doc.data)}</div>
                     <a class="pdf-link" href="${pdfUrl}" target="_blank" rel="noopener">
@@ -226,24 +247,49 @@ function renderDetails(row) {
         }).join('')
         : '<div class="meta">Nenhum documento para exibir.</div>';
 
+    const age = row.dataNascimento
+        ? `${formatDate(row.dataNascimento)}${row.idadeAnos !== null ? ` / ${row.idadeAnos} anos` : ''}`
+        : (row.idadeAnos !== null ? `${row.idadeAnos} anos` : 'Não informado');
+
     return `
-        <tr class="detail-row">
-            <td colspan="8">
-                <div class="detail-panel">
-                    <div class="detail-grid">
-                        <section class="detail-box">
-                            <h3>Atendimentos</h3>
-                            ${atendimentosHtml}
-                        </section>
-                        <section class="detail-box">
-                            <h3>Laudos disponiveis</h3>
-                            <div class="document-list">${docsHtml}</div>
-                        </section>
-                    </div>
-                </div>
-            </td>
-        </tr>
+        <section class="detail-box patient-facts" aria-label="Dados da paciente">
+            <div class="fact-item"><span>Nascimento / idade</span><strong>${escapeHtml(age)}</strong></div>
+            <div class="fact-item"><span>Telefone</span><strong>${escapeHtml(displayValue(row.telefone))}</strong></div>
+            <div class="fact-item"><span>CPF</span><strong>${escapeHtml(displayValue(row.cpf))}</strong></div>
+            <div class="fact-item"><span>CNS</span><strong>${escapeHtml(displayValue(row.cns))}</strong></div>
+            <div class="fact-item"><span>Procedimentos registrados</span><strong>${escapeHtml(displayValue(row.procedimentos))}</strong></div>
+            <div class="fact-item"><span>Última data</span><strong>${formatDate(row.ultimaData)}</strong></div>
+        </section>
+        <div class="detail-grid">
+            <section class="detail-box">
+                <h3>Atendimentos registrados</h3>
+                ${atendimentosHtml}
+            </section>
+            <section class="detail-box">
+                <h3>Laudos disponíveis</h3>
+                <div class="document-list">${docsHtml}</div>
+            </section>
+        </div>
     `;
+}
+
+function openPatientDrawer(row, trigger) {
+    lastDrawerTrigger = trigger || null;
+    drawerTitle.textContent = row.paciente || 'Detalhes da paciente';
+    drawerContent.innerHTML = renderDetails(row);
+    patientDrawer.classList.remove('hidden');
+    patientDrawer.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
+    closeDrawerButton.focus();
+}
+
+function closePatientDrawer(restoreFocus = true) {
+    if (!patientDrawer || patientDrawer.classList.contains('hidden')) return;
+    patientDrawer.classList.add('hidden');
+    patientDrawer.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('drawer-open');
+    if (restoreFocus && lastDrawerTrigger?.isConnected) lastDrawerTrigger.focus();
+    lastDrawerTrigger = null;
 }
 
 loginForm.addEventListener('submit', async event => {
@@ -260,7 +306,6 @@ loginForm.addEventListener('submit', async event => {
         });
         passwordInput.value = '';
         showPortal(data.user);
-        expandedRows.clear();
         await loadPatients();
     } catch (error) {
         loginMessage.textContent = error.message;
@@ -281,9 +326,21 @@ logoutButton.addEventListener('click', async () => {
 
 refreshButton.addEventListener('click', loadPatients);
 
+clearFiltersButton.addEventListener('click', () => {
+    window.clearTimeout(searchTimer);
+    searchInput.value = '';
+    typeFilter.value = '';
+    ageFilter.value = '';
+    dateFrom.value = '';
+    dateTo.value = '';
+    closePatientDrawer(false);
+    loadPatients();
+    searchInput.focus();
+});
+
 [typeFilter, ageFilter, dateFrom, dateTo].forEach(control => {
     control.addEventListener('change', () => {
-        expandedRows.clear();
+        closePatientDrawer(false);
         loadPatients();
     });
 });
@@ -291,22 +348,23 @@ refreshButton.addEventListener('click', loadPatients);
 searchInput.addEventListener('input', () => {
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => {
-        expandedRows.clear();
+        closePatientDrawer(false);
         loadPatients();
     }, 350);
 });
 
 patientRows.addEventListener('click', event => {
-    if (event.target.closest('a')) return;
-    const row = event.target.closest('.patient-row');
-    if (!row) return;
-    const key = row.dataset.key;
-    if (expandedRows.has(key)) {
-        expandedRows.delete(key);
-    } else {
-        expandedRows.add(key);
-    }
-    renderRows();
+    const button = event.target.closest('[data-row-index]');
+    if (!button) return;
+    const row = currentRows[Number(button.dataset.rowIndex)];
+    if (row) openPatientDrawer(row, button);
+});
+
+closeDrawerButton.addEventListener('click', () => closePatientDrawer());
+drawerBackdrop.addEventListener('click', () => closePatientDrawer());
+
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closePatientDrawer();
 });
 
 async function boot() {
