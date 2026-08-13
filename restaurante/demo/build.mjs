@@ -67,8 +67,10 @@ if (!document.querySelector('meta[name="viewport"]')) {
 
 const ATALHOS = `
 <div class="demo-atalhos">
-    <p>Demonstração — escolha um posto de trabalho para entrar. Os dados ficam
-    só neste aparelho e voltam ao início quando a página recarrega.</p>
+    <p>Demonstração — toque num posto para entrar direto. Se preferir digitar:
+    usuário <strong>garcom</strong>, <strong>cozinha</strong>, <strong>caixa</strong>
+    ou <strong>gerente</strong>, senha <strong>123456</strong>.</p>
+    <p>Os dados ficam só neste aparelho e voltam ao início quando a página recarrega.</p>
     <div class="demo-postos">
         <button type="button" data-posto="garcom"><strong>Garçom</strong><span>salão e comandas</span></button>
         <button type="button" data-posto="cozinha"><strong>Cozinha</strong><span>fila de produção</span></button>
@@ -86,7 +88,7 @@ const CHROME_DEMO = `
     for (const botao of document.querySelectorAll('.demo-postos button')) {
         botao.addEventListener('click', () => {
             document.querySelector('#loginInput').value = botao.dataset.posto;
-            document.querySelector('#senhaInput').value = 'demo';
+            document.querySelector('#senhaInput').value = window.__demoRestaurante.senha;
             document.querySelector('#loginForm').requestSubmit();
         });
     }

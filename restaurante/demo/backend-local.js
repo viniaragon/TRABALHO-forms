@@ -70,6 +70,11 @@
         ]],
     ];
 
+    // Senha unica e obvia: numa demonstracao, tropecar no login queima o
+    // momento. Vale so aqui — o sistema real sorteia senha no seed e nao tem
+    // nenhuma embutida no codigo.
+    const SENHA_DEMO = '123456';
+
     const USUARIOS = [
         ['garcom', 'Rita, salao', 'garcom'],
         ['cozinha', 'Praca da cozinha', 'cozinha'],
@@ -84,7 +89,7 @@
         };
 
         for (const [login, nome, papel] of USUARIOS) {
-            bd.usuarios.push({ id: proximoId('usuarios'), login, nome, papel, senha: 'demo', ativo: true, ultimo_acesso: null });
+            bd.usuarios.push({ id: proximoId('usuarios'), login, nome, papel, senha: SENHA_DEMO, ativo: true, ultimo_acesso: null });
         }
         for (const [nome, setor, ordem, produtos] of CARDAPIO) {
             const categoria = { id: proximoId('categorias'), nome, setor, ordem, ativa: true };
@@ -837,6 +842,9 @@
 
     semear();
     window.__demoRestaurante = {
+        // Fonte unica da senha: a tela de entrada le daqui em vez de repetir
+        // o valor e correr o risco de as duas versoes divergirem.
+        senha: SENHA_DEMO,
         reiniciar() {
             sessao = null;
             ouvintes.clear();
