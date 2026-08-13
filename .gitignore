@@ -34,3 +34,6 @@ backups/
 # Relatórios com dados de pacientes e logs locais
 reports/
 *.log
+
+# Demo do restaurante (arquivo gerado por restaurante/demo/build.mjs)
+restaurante/demo/comanda.html

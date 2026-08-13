@@ -124,6 +124,26 @@ restaurante/seed.js       carga inicial
 public/restaurante.*      tela única que troca de view conforme o papel
 ```
 
+## Demo navegável (sem servidor)
+
+```bash
+npm run restaurante:demo        # gera restaurante/demo/comanda.html
+```
+
+Uma página única e autocontida, para abrir no celular ou mandar para alguém ver.
+`backend-local.js` falsifica `fetch` e `EventSource` **antes** da tela carregar,
+então `public/restaurante.js` roda byte a byte igual ao de produção — a demo
+exercita a interface de verdade, não uma reimplementação parecida. As regras de
+negócio são espelhadas do servidor: máquina de estados, papéis, centavos, preço
+congelado, idempotência e as travas de fechamento.
+
+O que a demo **não** reproduz: concorrência real (`FOR UPDATE`, índice único
+parcial) e estado compartilhado entre aparelhos — cada navegador tem o próprio
+banco em memória, que zera ao recarregar. Para o garçom e a cozinha verem a
+mesma comanda, é preciso o servidor com PostgreSQL.
+
+Rode de novo depois de mexer na aplicação, para a demo não descolar do sistema.
+
 ## Próximos incrementos
 
 - Relatórios: faturamento por turno, ticket médio, mais vendidos, tempo médio

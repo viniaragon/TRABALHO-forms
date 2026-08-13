@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "restaurante:seed": "node restaurante/seed.js"
+    "restaurante:seed": "node restaurante/seed.js",
+    "restaurante:demo": "node restaurante/demo/build.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
