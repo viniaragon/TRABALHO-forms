@@ -77,6 +77,14 @@ app.get('/portal-gestor', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'portal-gestor.html'));
 });
 
+// Modulo de gestao de pedidos do restaurante. Vive no schema `restaurante` e
+// no seu proprio pool, sem tocar em nada do OCIS.
+app.use('/api/restaurante', require('./restaurante/rotas'));
+
+app.get('/restaurante', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'restaurante.html'));
+});
+
 // Ordem de preferência: OCI_DB_* (explícito) -> POSTGRES_* (injetado pelo
 // Zeabur quando há um serviço PostgreSQL no mesmo projeto) -> local (Docker).
 const ociPool = new Pool({

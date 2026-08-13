@@ -4,7 +4,8 @@
   "description": "Dashboard infográfico para consolidação de formulários",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "restaurante:seed": "node restaurante/seed.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

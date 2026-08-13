@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurante · Gestão de Pedidos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="restaurante.css">
+</head>
+<body>
+
+<section id="loginView" class="login-shell">
+    <form id="loginForm" class="login-card" autocomplete="on">
+        <span class="login-marca">Gestão de Pedidos</span>
+        <h1>Restaurante</h1>
+        <p>Entre com o usuário do seu posto de trabalho.</p>
+
+        <label for="loginInput">Usuário</label>
+        <input id="loginInput" name="login" type="text" autocomplete="username" required autofocus>
+
+        <label for="senhaInput">Senha</label>
+        <input id="senhaInput" name="senha" type="password" autocomplete="current-password" required>
+
+        <button id="loginButton" class="btn primary bloco" type="submit">Entrar</button>
+        <p id="loginErro" class="erro" role="alert" hidden></p>
+    </form>
+</section>
+
+<div id="appView" hidden>
+    <header class="topo">
+        <div class="topo-marca">
+            <strong>Restaurante</strong>
+            <span>Gestão de Pedidos</span>
+        </div>
+        <nav id="abas" class="abas" aria-label="Áreas do sistema"></nav>
+        <div class="topo-usuario">
+            <span id="conexao" class="conexao" title="Conexão em tempo real">•</span>
+            <div class="topo-identidade">
+                <strong id="usuarioNome"></strong>
+                <span id="usuarioPapel"></span>
+            </div>
+            <button id="sairButton" class="btn discreto" type="button">Sair</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Salão -->
+        <section id="viewSalao" class="view">
+            <div class="view-cabecalho">
+                <div>
+                    <h2>Salão</h2>
+                    <p class="legenda">Toque numa mesa livre para abrir a comanda.</p>
+                </div>
+                <div class="legenda-cores">
+                    <span><i class="ponto livre"></i>Livre</span>
+                    <span><i class="ponto ocupada"></i>Ocupada</span>
+                    <span><i class="ponto pronta"></i>Item pronto</span>
+                    <span><i class="ponto conta"></i>Conta pedida</span>
+                </div>
+            </div>
+            <div id="mapaMesas" class="mapa-mesas"></div>
+        </section>
+
+        <!-- Comanda -->
+        <section id="viewComanda" class="view">
+            <div class="view-cabecalho">
+                <div>
+                    <button id="voltarSalao" class="btn discreto" type="button">← Salão</button>
+                    <h2 id="comandaTitulo">Comanda</h2>
+                    <p id="comandaSubtitulo" class="legenda"></p>
+                </div>
+                <div class="acoes-comanda">
+                    <button id="abrirCardapio" class="btn primary" type="button">Lançar itens</button>
+                    <button id="pedirConta" class="btn" type="button">Pedir a conta</button>
+                </div>
+            </div>
+            <div class="comanda-grade">
+                <div id="comandaItens" class="painel"></div>
+                <aside id="comandaTotais" class="painel resumo"></aside>
+            </div>
+        </section>
+
+        <!-- Cozinha (KDS) -->
+        <section id="viewCozinha" class="view">
+            <div class="view-cabecalho">
+                <div>
+                    <h2>Produção</h2>
+                    <p class="legenda">Fila em tempo real. O cronômetro conta desde o lançamento.</p>
+                </div>
+                <div id="filtroSetores" class="filtro-setores"></div>
+            </div>
+            <div id="filaProducao" class="fila-producao"></div>
+        </section>
+
+        <!-- Caixa -->
+        <section id="viewCaixa" class="view">
+            <div class="view-cabecalho">
+                <div>
+                    <h2>Caixa</h2>
+                    <p class="legenda">Conferência, recebimento e fechamento de conta.</p>
+                </div>
+            </div>
+            <div class="caixa-grade">
+                <div id="caixaLista" class="painel"></div>
+                <div id="caixaConta" class="painel"></div>
+            </div>
+        </section>
+
+        <!-- Admin -->
+        <section id="viewAdmin" class="view">
+            <div class="view-cabecalho">
+                <div>
+                    <h2>Administração</h2>
+                    <p class="legenda">Cardápio, salão e equipe.</p>
+                </div>
+                <div id="abasAdmin" class="filtro-setores"></div>
+            </div>
+            <div id="adminConteudo" class="painel"></div>
+        </section>
+    </main>
+</div>
+
+<!-- Gaveta do cardápio (lançamento de pedido) -->
+<div id="gaveta" class="gaveta" hidden>
+    <div class="gaveta-fundo" data-fechar-gaveta></div>
+    <div class="gaveta-corpo" role="dialog" aria-modal="true" aria-label="Cardápio">
+        <header>
+            <h3>Cardápio</h3>
+            <button class="btn discreto" type="button" data-fechar-gaveta>Fechar</button>
+        </header>
+        <input id="buscaProduto" type="search" placeholder="Buscar prato ou bebida...">
+        <div id="listaCardapio" class="lista-cardapio"></div>
+        <footer>
+            <div id="carrinho" class="carrinho"></div>
+            <button id="enviarPedido" class="btn primary bloco" type="button" disabled>Enviar para a produção</button>
+        </footer>
+    </div>
+</div>
+
+<div id="avisos" class="avisos" aria-live="polite"></div>
+
+<script src="restaurante.js"></script>
+</body>
+</html>
