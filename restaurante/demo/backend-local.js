@@ -775,7 +775,11 @@
         const url = String(recurso && recurso.url ? recurso.url : recurso);
         if (!url.includes('/api/restaurante')) return fetchOriginal(recurso, opcoes);
 
-        const endereco = new URL(url, window.location.origin);
+        // Base fixa de propósito: aberto por `file://` (dois cliques, sem
+        // servidor) `window.location.origin` é a string "null" e `new URL`
+        // lança. Só interessam `pathname` e `searchParams`, então qualquer
+        // base válida serve — e uma URL absoluta ignora a base de qualquer jeito.
+        const endereco = new URL(url, 'http://demo.local');
         const caminho = endereco.pathname.replace(/^.*\/api\/restaurante/, '');
         const cabecalhos = {};
         for (const [chave, valor] of Object.entries(opcoes.headers || {})) {
